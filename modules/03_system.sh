@@ -20,38 +20,57 @@ gum spin --title "Configuring basic system settings..." -- bash -c "
   arch-chroot /mnt locale-gen &>/dev/null
 "
 
-# 4. LIMINE BOOTLOADER
-# Limine is opinionated: 100MB EFI is empty, kernels are on Btrfs.
-gum spin --title "Installing Limine bootloader..." -- bash -c "
-  # Install limine binaries to the EFI partition
-  mkdir -p /mnt/efi/EFI/BOOT
-  
-  # Deploy limine to the drive MBR/GPT
-  TARGET_DISK=\$(lsblk -no PKNAME \$(findmnt -no SOURCE /mnt/efi))
-  limine bios-install /dev/\$TARGET_DISK
-  
-  # Copy the EFI executable
-  cp /usr/share/limine/BOOTX64.EFI /mnt/efi/EFI/BOOT/BOOTX64.EFI
-"
+# 4. BOOTLOADER SELECTION
+BOOTLOADER=$(gum choose "Install Limine (Minimalist)" "Skip Bootloader (I'll use my existing GRUB/systemd-boot)")
 
-# 5. LIMINE CONFIGURATION
-# We tell Limine to boot linux-zen from the Btrfs root subvolume (@).
-# Limine can find the Btrfs partition by searching for the label or UUID.
-gum spin --title "Creating Limine configuration..." -- bash -c "
+if [ "$BOOTLOADER" == "Install Limine (Minimalist)" ]; then
+  # 4a. LIMINE INSTALLATION
+  # Limine is opinionated: 100MB EFI is empty, kernels are on Btrfs.
+  gum spin --title "Installing Limine bootloader..." -- bash -c "
+    # Install limine binaries to the EFI partition
+    mkdir -p /mnt/efi/EFI/BOOT
+    
+    # Deploy limine to the drive MBR/GPT
+    TARGET_DISK=\$(lsblk -no PKNAME \$(findmnt -no SOURCE /mnt/efi))
+    limine bios-install /dev/\$TARGET_DISK
+    
+    # Copy the EFI executable
+    cp /usr/share/limine/BOOTX64.EFI /mnt/efi/EFI/BOOT/BOOTX64.EFI
+  "
+
+  # 4b. LIMINE CONFIGURATION
+  # Detect where kernels live (/boot partition vs root partition)
+  KERNEL_PART=$(findmnt -no SOURCE /mnt/boot || findmnt -no SOURCE /mnt)
+  KERNEL_UUID=$(lsblk -no UUID "$KERNEL_PART")
+  ROOT_UUID=$(lsblk -no UUID $(findmnt -no SOURCE /mnt))
+  
+  # Determine path within the partition
+  # If it's a separate boot partition, path is /vmlinuz...
+  # If it's root, path is /boot/vmlinuz... (unless it's Btrfs subvol @)
+  if findmnt /mnt/boot &>/dev/null; then
+    K_PATH="/vmlinuz-linux-zen"
+    M_PATH="/initramfs-linux-zen.img"
+  else
+    K_PATH="/boot/vmlinuz-linux-zen"
+    M_PATH="/boot/initramfs-linux-zen.img"
+  fi
+
+  gum spin --title "Creating Limine configuration..." -- bash -c "
 cat <<EOF > /mnt/efi/limine.conf
 TIMEOUT=3
 SERIAL=no
 
 :Arch Linux (Zen)
     PROTOCOL=linux
-    # Use partition label to find the Btrfs partition
-    KERNEL_PATH=boot://2/boot/vmlinuz-linux-zen
-    MODULE_PATH=boot://2/boot/initramfs-linux-zen.img
-    CMDLINE=root=LABEL=ARCH_TERRA rw rootflags=subvol=@
+    # Search for the partition containing kernels
+    KERNEL_PATH=boot://uuid($KERNEL_UUID)$K_PATH
+    MODULE_PATH=boot://uuid($KERNEL_UUID)$M_PATH
+    CMDLINE=root=UUID=$ROOT_UUID rw rootflags=subvol=@
 EOF
 "
-# NOTE: boot://2 refers to the second partition on the boot drive (our Btrfs partition).
-# Since we know the layout (1: EFI, 2: BTRFS), this is safe.
+fi
 
-gum style --foreground 82 "System installation and Limine configuration complete."
+gum style --foreground 82 "System installation finished. Mode: $BOOTLOADER"
+
+
 
