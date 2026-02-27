@@ -48,15 +48,14 @@ if [ "$SUDO_ACCESS" == "yes" ]; then
 fi
 
 # 5. DOTFILES & PAYLOAD DEPLOYMENT
-if [ -d "payload/.config" ]; then
-  gum spin --title "Deploying configuration (payload)..." -- bash -c "
-    mkdir -p /mnt/home/${USERNAME}/.config
-    cp -r payload/.config/* /mnt/home/${USERNAME}/.config/
-    arch-chroot /mnt chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/
-  "
-else
-  gum style --foreground 214 "No payload/ directory found — skipping dotfile deployment."
-fi
+REPO_URL="https://github.com/grewstad/chrome-unnamed.git"
+gum spin --title "Fetching dotfiles from GitHub..." -- bash -c '
+  git clone --depth 1 "$1" /tmp/payload_repo &>/dev/null
+  mkdir -p /mnt/home/"$2"/.config
+  cp -r /tmp/payload_repo/payload/.config/* /mnt/home/"$2"/.config/
+  arch-chroot /mnt chown -R "$2":"$2" /home/"$2"/
+  rm -rf /tmp/payload_repo
+' _ "$REPO_URL" "$USERNAME"
 
 # 6. SHELL POLISH
 gum spin --title "Finalizing shell settings..." -- bash -c "
