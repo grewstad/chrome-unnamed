@@ -50,8 +50,12 @@ gum spin --title "Installing Limine EFI files..." -- bash -c "
 # Resolve where the kernel files live (separate /boot vs. root /boot dir)
 # Using -v ensures Btrfs subvolumes don't append bracketed paths like /dev/sda3[/@]
 KERNEL_PART=$(findmnt -vno SOURCE /mnt/boot 2>/dev/null || findmnt -vno SOURCE /mnt)
+if [ -z "$KERNEL_PART" ]; then echo "ERROR: Could not find kernel partition (mounting failed?)."; exit 1; fi
+
 KERNEL_UUID=$(lsblk -no UUID "$KERNEL_PART")
-ROOT_UUID=$(lsblk -no UUID "$(findmnt -vno SOURCE /mnt)")
+ROOT_PART=$(findmnt -vno SOURCE /mnt)
+if [ -z "$ROOT_PART" ]; then echo "ERROR: Could not find root partition."; exit 1; fi
+ROOT_UUID=$(lsblk -no UUID "$ROOT_PART")
 
 if findmnt /mnt/boot &>/dev/null; then
   K_PATH="/vmlinuz-linux-zen"

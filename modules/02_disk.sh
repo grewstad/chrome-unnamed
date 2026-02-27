@@ -77,6 +77,15 @@ if gum confirm "Use a separate /home partition?"; then
   fi
 fi
 
+HAS_MANUAL_BOOT=false
+if gum confirm "Use a separate /boot partition? (Recommended for complex setups)"; then
+  PART_BOOT=$(select_partition "Select /boot partition")
+  if [ -n "$PART_BOOT" ]; then
+    MOUNTS["$PART_BOOT"]="/boot"
+    HAS_MANUAL_BOOT=true
+  fi
+fi
+
 while gum confirm "Add another custom mount point?"; do
   MNT_POINT=$(gum input --placeholder "Enter mount point (e.g. /data)")
   if [ -n "$MNT_POINT" ]; then
@@ -123,30 +132,40 @@ udevadm settle
 
 # 4. EXECUTION: MOUNTING
 # Mount root first, then create Btrfs subvolumes if needed.
-gum spin --title "Mounting root filesystem..." -- bash -c "
-  mount ${PART_ROOT} /mnt
+# We pass variables as positional parameters to bash -c to avoid premature expansion.
+gum spin --title "Mounting root filesystem..." -- bash -c '
+  set -e
+  mount "$1" /mnt
 
-  if [ \"\$(lsblk -no FSTYPE ${PART_ROOT})\" == 'btrfs' ]; then
+  # Check filesystem AFTER mounting to avoid premature expansion issues
+  if lsblk -no FSTYPE "$1" | grep -q "btrfs"; then
     btrfs subvolume create /mnt/@ &>/dev/null || true
     btrfs subvolume create /mnt/@home &>/dev/null || true
     umount /mnt
     udevadm settle
-    mount -o compress=zstd:3,noatime,autodefrag,subvol=@ ${PART_ROOT} /mnt
+    mount -o compress=zstd:3,noatime,autodefrag,subvol=@ "$1" /mnt
     mkdir -p /mnt/home
-    if [ '${HAS_MANUAL_HOME}' != 'true' ]; then
-      mount -o compress=zstd:3,noatime,autodefrag,subvol=@home ${PART_ROOT} /mnt/home
+    # Only mount internal @home if a separate partition was NOT chosen
+    if [ "$2" != "true" ]; then
+      mount -o compress=zstd:3,noatime,autodefrag,subvol=@home "$1" /mnt/home
     fi
   fi
-"
+' _ "$PART_ROOT" "$HAS_MANUAL_HOME"
 
-# Mount other partitions
+# Mount other partitions in a safe order
+# (EFI and BOOT should be mounted after ROOT)
 for part in "${!MOUNTS[@]}"; do
   mnt="${MOUNTS[$part]}"
   if [ "$mnt" == "/" ]; then continue; fi
-  gum spin --title "Mounting $part → $mnt..." -- bash -c "
-    mkdir -p /mnt${mnt}
-    mount ${part} /mnt${mnt}
-  "
+  if [ "$mnt" == "/home" ] && lsblk -no FSTYPE "$PART_ROOT" | grep -q "btrfs" && [ "$HAS_MANUAL_HOME" != "true" ]; then
+     # Skip as it was handled above
+     continue
+  fi
+
+  gum spin --title "Mounting $part → $mnt..." -- bash -c '
+    mkdir -p /mnt"$2"
+    mount "$1" /mnt"$2"
+  ' _ "$part" "$mnt"
 done
 
 # Enable swap now that TUI prompts are done
