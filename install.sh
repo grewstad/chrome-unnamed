@@ -1,21 +1,39 @@
 #!/bin/bash
 # Chrome-Unnamed: Main Installer Entry Point
+set -e
+trap 'gum style --foreground 196 "CRITICAL ERROR: Installer crashed or a command failed. Aborting." ; exit 1' ERR
 
 # 1. BOOTSTRAP
-# Ensure gum is installed for the TUI.
-if ! command -v gum &> /dev/null; then
+if ! command -v gum &>/dev/null; then
   echo "Installing gum (TUI helper)..."
   pacman -Sy gum --noconfirm &>/dev/null
 fi
 
-# 2. WELCOME
+# 2. PREREQUISITES & SAFETY CHECKS
+if [ ! -d "/sys/firmware/efi/efivars" ]; then
+    gum style --foreground 196 "ERROR: System not booted in UEFI mode. This installer requires UEFI."
+    exit 1
+fi
+
+# 3. WELCOME & OPTIMIZATION
 gum style \
 	--foreground 212 --border-foreground 212 --border double \
 	--align center --width 50 --margin "1 2" --padding "2 4" \
 	"CHROME-UNNAMED" "Arch Linux Installer"
 
-# 3. EXECUTION
-# Run modules in order.
+if gum confirm "Optimize mirrorlist before starting (Recommended)?"; then
+    gum spin --title "Optimizing mirrors (reflector)..." -- \
+        reflector --latest 20 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+fi
+
+# 4. KEYBOARD LAYOUT
+KEYMAPS=$(localectl list-keymaps)
+KEYMAP=$(echo -e "us\n$KEYMAPS" | gum filter --placeholder "Select keyboard layout (default: us)")
+if [ -z "$KEYMAP" ]; then KEYMAP="us"; fi
+export KEYMAP
+gum spin --title "Applying keymap $KEYMAP..." -- loadkeys "$KEYMAP"
+
+# 5. EXECUTION
 modules=(
   "modules/01_network.sh"
   "modules/02_disk.sh"
@@ -25,16 +43,13 @@ modules=(
 
 for module in "${modules[@]}"; do
   if [ -f "$module" ]; then
+    # We remove set +e here so failures crash the installer immediately.
     source "$module"
-    if [ $? -ne 0 ]; then
-      gum style --foreground 196 "Module $module failed. Aborting."
-      exit 1
-    fi
   else
     echo "Error: $module not found."
     exit 1
   fi
 done
 
-# 4. FINISH
-gum confirm "Installation complete! Would you like to reboot now?" && reboot
+# 6. FINISH
+gum confirm "Installation complete! Reboot now?" && reboot

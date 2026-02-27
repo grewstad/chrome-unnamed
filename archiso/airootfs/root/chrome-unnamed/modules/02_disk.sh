@@ -7,14 +7,14 @@ if [ "$MODE" == "Manual Partitioning (Run cfdisk)" ]; then
   DISK_LIST=$(lsblk -dno NAME,SIZE,MODEL | grep -v "loop" | grep -v "sr")
   SELECTED_DISK_LINE=$(echo "$DISK_LIST" | gum choose --header "Select Disk for Partitioning")
   SELECTED_DISK="/dev/$(echo "$SELECTED_DISK_LINE" | awk '{print $1}')"
-
+  
   if [ -n "$SELECTED_DISK" ]; then
     cfdisk "$SELECTED_DISK"
   fi
 fi
 
 # 2. SELECTION CORE
-PART_LIST=$(lsblk -plno NAME,SIZE,TYPE,FSTYPE,LABEL | grep "part")
+PART_LIST=$(lsblk -pno NAME,SIZE,TYPE,FSTYPE,LABEL | grep "part" | grep -v "\[SWAP\]")
 
 if [ -z "$PART_LIST" ]; then
   gum style --foreground 196 "No partitions found. Please partition your disk first."
@@ -26,16 +26,16 @@ USED_PARTS=()
 
 select_partition() {
   local prompt="$1"
-  local filter="$2"
-
+  local filter="$2" # Optional filter for part type/fs
+  
   local choices
   if [ -n "$filter" ]; then
     choices=$(echo "$PART_LIST" | grep "$filter")
   else
     choices="$PART_LIST"
   fi
-
-  # Remove already used partitions
+  
+  # Remove already used partitions from choices
   for p in "${USED_PARTS[@]}"; do
     choices=$(echo "$choices" | grep -v "$p")
   done
@@ -46,9 +46,8 @@ select_partition() {
 
   local selected_raw
   selected_raw=$(echo "$choices" | gum choose --header "$prompt")
-  local selected
-  selected=$(echo "$selected_raw" | awk '{print $1}')
-
+  local selected=$(echo "$selected_raw" | awk '{print $1}')
+  
   if [ -n "$selected" ]; then
     USED_PARTS+=("$selected")
     echo "$selected"
@@ -56,11 +55,14 @@ select_partition() {
 }
 
 # --- MANDATORY SELECTION ---
+# ROOT (/)
 PART_ROOT=$(select_partition "Select ROOT (/) partition")
 if [ -z "$PART_ROOT" ]; then return 1; fi
 MOUNTS["$PART_ROOT"]="/"
 
-PART_EFI=$(select_partition "Select EFI partition (usually vfat, 100MB–512MB)")
+# EFI (/efi)
+# Precaution: Should be vfat or EFI type, but we allow selection if unformatted
+PART_EFI=$(select_partition "Select EFI partition (Usually vfat or 100MB-512MB)")
 if [ -z "$PART_EFI" ]; then
   gum style --foreground 196 "ERROR: No EFI partition selected. Aborting."
   return 1
@@ -68,15 +70,23 @@ fi
 MOUNTS["$PART_EFI"]="/efi"
 
 # --- OPTIONAL SELECTION ---
+# /boot
+if gum confirm "Use a separate /boot partition? (Not needed for 'The Hack')"; then
+  PART_BOOT=$(select_partition "Select /boot partition")
+  if [ -n "$PART_BOOT" ]; then MOUNTS["$PART_BOOT"]="/boot"; fi
+fi
+
+# /home
 HAS_MANUAL_HOME=false
 if gum confirm "Use a separate /home partition?"; then
   PART_HOME=$(select_partition "Select /home partition")
-  if [ -n "$PART_HOME" ]; then
+  if [ -n "$PART_HOME" ]; then 
     MOUNTS["$PART_HOME"]="/home"
     HAS_MANUAL_HOME=true
   fi
 fi
 
+# Additional Mounts Loop
 while gum confirm "Add another custom mount point?"; do
   MNT_POINT=$(gum input --placeholder "Enter mount point (e.g. /data)")
   if [ -n "$MNT_POINT" ]; then
@@ -89,69 +99,60 @@ while gum confirm "Add another custom mount point?"; do
   fi
 done
 
-# --- SWAP DETECTION ---
-# Do this BEFORE formatting/mounting so the user can confirm via TUI.
-SWAP_PART=$(lsblk -plno NAME,TYPE,FSTYPE | awk '$2=="part" && $3=="swap" {print $1}' | head -n1)
-ENABLE_SWAP=false
-if [ -n "$SWAP_PART" ]; then
-  if gum confirm "Swap partition detected ($SWAP_PART). Enable it?"; then
-    ENABLE_SWAP=true
-  fi
-fi
-
 # 3. FORMATTING DECISIONS
 for part in "${!MOUNTS[@]}"; do
   mnt="${MOUNTS[$part]}"
   if [ "$mnt" == "/efi" ]; then
-    if gum confirm "Format $part as FAT32? (CAUTION: this erases existing bootloaders)"; then
-      gum spin --title "Formatting $part as FAT32..." -- mkfs.fat -F32 "$part"
-    fi
-  elif [ "$mnt" == "/" ] || [ "$mnt" == "/boot" ]; then
-    gum style --foreground 214 "Enforcing Btrfs for $mnt to ensure a clean wipe..."
-    if gum confirm "Wipe and format $part as btrfs for $mnt? (WARNING: total data loss)"; then
-      gum spin --title "Formatting $part as btrfs..." -- mkfs.btrfs -f "$part"
+    if gum confirm "Format $part as FAT32? (CAUTION: Wipe your current bootloaders?)"; then
+      gum spin --title "Formatting $part..." -- mkfs.fat -F32 "$part"
     fi
   else
-    if gum confirm "Format $part for $mnt? (WARNING: data loss)"; then
+    if gum confirm "Format $part for $mnt?"; then
       FS=$(gum choose "btrfs" "ext4" "xfs")
       gum spin --title "Formatting $part as $FS..." -- mkfs."$FS" -f "$part"
     fi
   fi
 done
 
+# Ensure kernel is aware of new filesystem metadata
 udevadm settle
 
-# 4. EXECUTION: MOUNTING
-# Mount root first, then create Btrfs subvolumes if needed.
-gum spin --title "Mounting root filesystem..." -- bash -c "
-  mount ${PART_ROOT} /mnt
 
-  if [ \"\$(lsblk -no FSTYPE ${PART_ROOT})\" == 'btrfs' ]; then
-    btrfs subvolume create /mnt/@ &>/dev/null || true
-    btrfs subvolume create /mnt/@home &>/dev/null || true
+# 4. EXECUTION: MOUNTING
+# Root first
+gum spin --title "Mounting Root..." -- bash -c "
+  mount $PART_ROOT /mnt
+  # If Root is Btrfs, create subvolumes @ and @home if they don't exist
+  if [ \"\$(lsblk -no FSTYPE $PART_ROOT)\" == \"btrfs\" ]; then
+    btrfs subvolume create /mnt/@ &>/dev/null
+    btrfs subvolume create /mnt/@home &>/dev/null
     umount /mnt
     udevadm settle
-    mount -o compress=zstd:3,noatime,autodefrag,subvol=@ ${PART_ROOT} /mnt
-    mkdir -p /mnt/home
-    if [ '${HAS_MANUAL_HOME}' != 'true' ]; then
-      mount -o compress=zstd:3,noatime,autodefrag,subvol=@home ${PART_ROOT} /mnt/home
+    mount -o compress=zstd:3,subvol=@ $PART_ROOT /mnt
+    
+    # Check if a separate /home partition was selected
+    if [ \"$HAS_MANUAL_HOME\" == \"true\" ]; then
+      # User picked a different partition for /home, so don't mount @home subvolume
+      mkdir -p /mnt/home
+    else
+      # Use the @home subvolume since no dedicated partition was picked
+      mkdir -p /mnt/home
+      mount -o compress=zstd:3,subvol=@home $PART_ROOT /mnt/home
     fi
   fi
 "
 
-# Mount other partitions
+# Other mounts
 for part in "${!MOUNTS[@]}"; do
   mnt="${MOUNTS[$part]}"
   if [ "$mnt" == "/" ]; then continue; fi
-  gum spin --title "Mounting $part → $mnt..." -- bash -c "
-    mkdir -p /mnt${mnt}
-    mount ${part} /mnt${mnt}
+  
+  gum spin --title "Mounting $part to $mnt..." -- bash -c "
+    mkdir -p /mnt$mnt
+    mount $part /mnt$mnt
   "
 done
 
-# Enable swap now that TUI prompts are done
-if [ "$ENABLE_SWAP" == "true" ]; then
-  gum spin --title "Enabling swap ($SWAP_PART)..." -- swapon "$SWAP_PART"
-fi
-
 gum style --foreground 82 "Mounting complete. All partitions mapped and secured."
+
+
