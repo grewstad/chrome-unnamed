@@ -6,8 +6,16 @@ trap 'gum style --foreground 196 "CRITICAL ERROR: Installer crashed or a command
 # 1. BOOTSTRAP
 if ! command -v gum &>/dev/null; then
   echo "Installing gum (TUI helper)..."
-  pacman -Sy gum --noconfirm &>/dev/null
+  pacman -Sy gum --noconfirm --needed &>/dev/null
 fi
+
+# 1b. TOOL CHECK
+for tool in reflector lsblk awk grep findmnt; do
+    if ! command -v "$tool" &>/dev/null; then
+        echo "Error: Required tool '$tool' is missing."
+        exit 1
+    fi
+done
 
 # 2. PREREQUISITES & SAFETY CHECKS
 if [ ! -d "/sys/firmware/efi/efivars" ]; then
@@ -44,6 +52,7 @@ modules=(
 for module in "${modules[@]}"; do
   if [ -f "$module" ]; then
     # We remove set +e here so failures crash the installer immediately.
+    # shellcheck source=/dev/null
     source "$module"
   else
     echo "Error: $module not found."

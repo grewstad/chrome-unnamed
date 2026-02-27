@@ -1,3 +1,4 @@
 out/
 *.iso
 /tmp/archiso-tmp
+work/

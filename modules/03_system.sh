@@ -1,3 +1,4 @@
+#!/bin/bash
 # chrome-unnamed: System Module
 
 # 1. PACSTRAP
@@ -47,43 +48,39 @@ gum spin --title "Installing Limine EFI files..." -- bash -c "
 "
 
 # 4b. LIMINE CONFIGURATION
-# Resolve where the kernel files live (separate /boot vs. root /boot dir)
-# Using -v ensures Btrfs subvolumes don't append bracketed paths like /dev/sda3[/@]
+# Resolve where the kernel files live
+# Chain-booting: Kernels are usually in /boot on the ROOT partition.
 KERNEL_PART=$(findmnt -vno SOURCE /mnt/boot 2>/dev/null || findmnt -vno SOURCE /mnt)
-if [ -z "$KERNEL_PART" ]; then echo "ERROR: Could not find kernel partition (mounting failed?)."; exit 1; fi
+if [ -z "$KERNEL_PART" ]; then 
+    gum style --foreground 196 "ERROR: Could not find kernel partition."
+    exit 1
+fi
 
 KERNEL_UUID=$(lsblk -no UUID "$KERNEL_PART")
 ROOT_PART=$(findmnt -vno SOURCE /mnt)
-if [ -z "$ROOT_PART" ]; then echo "ERROR: Could not find root partition."; exit 1; fi
 ROOT_UUID=$(lsblk -no UUID "$ROOT_PART")
+
+# Detect CPU for microcode
+UCODE=""
+if grep -q "Intel" /proc/cpuinfo; then
+    UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/boot/intel-ucode.img"
+    # Fallback if /boot is separate
+    if findmnt /mnt/boot &>/dev/null; then UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/intel-ucode.img"; fi
+elif grep -q "AMD" /proc/cpuinfo; then
+    UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/boot/amd-ucode.img"
+    if findmnt /mnt/boot &>/dev/null; then UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/amd-ucode.img"; fi
+fi
 
 if findmnt /mnt/boot &>/dev/null; then
   K_PATH="/vmlinuz-linux-zen"
-  INITRAMFS_PATH="/initramfs-linux-zen.img"
-  INTEL_UCODE_PATH="/intel-ucode.img"
-  AMD_UCODE_PATH="/amd-ucode.img"
+  I_PATH="/initramfs-linux-zen.img"
 else
   K_PATH="/boot/vmlinuz-linux-zen"
-  INITRAMFS_PATH="/boot/initramfs-linux-zen.img"
-  INTEL_UCODE_PATH="/boot/intel-ucode.img"
-  AMD_UCODE_PATH="/boot/amd-ucode.img"
+  I_PATH="/boot/initramfs-linux-zen.img"
 fi
 
-gum spin --title "Writing Limine configuration..." -- bash -c "true"
-
-# Write the config directly (NOT inside bash -c) so all shell variables expand correctly.
-cat > /mnt/efi/limine.conf << EOF
-TIMEOUT=3
-SERIAL=no
-
-:Chrome-Unnamed (Arch Zen)
-    PROTOCOL=linux
-    KERNEL_PATH=uuid(${KERNEL_UUID}):${K_PATH}
-    MODULE_PATH=uuid(${KERNEL_UUID}):${INTEL_UCODE_PATH}
-    MODULE_PATH=uuid(${KERNEL_UUID}):${AMD_UCODE_PATH}
-    MODULE_PATH=uuid(${KERNEL_UUID}):${INITRAMFS_PATH}
-    CMDLINE=root=UUID=${ROOT_UUID} rw rootflags=subvol=@
 EOF
+' _ "$KERNEL_UUID" "$K_PATH" "$UCODE" "$I_PATH" "$ROOT_UUID"
 
 # 4c. REGISTER UEFI BOOT ENTRY
 # Without this step, the bootloader file exists but firmware doesn't know about it.

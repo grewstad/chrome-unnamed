@@ -1,3 +1,4 @@
+#!/bin/bash
 # chrome-unnamed: Setup Module
 
 # 1. INTERACTIVE PROMPTS — collect everything before making changes
@@ -22,7 +23,7 @@ SUDO_ACCESS=$(gum confirm "Give $USERNAME sudo (wheel) access?" && echo "yes" ||
 APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber reflector"
 
 gum spin --title "Installing applications..." -- \
-  pacstrap -K /mnt $APPS --noconfirm
+  pacstrap -K /mnt "$APPS" --noconfirm
 
 # 2b. POST-INSTALL SERVICE ENABLEMENT
 gum spin --title "Enabling services..." -- bash -c "
@@ -31,12 +32,11 @@ gum spin --title "Enabling services..." -- bash -c "
 "
 
 # 3. USER CREATION & PASSWORDS
-# IMPORTANT: Variables must be in double-quoted strings so they expand correctly.
-# Using printf instead of echo for password to handle special characters safely.
 gum spin --title "Setting up user accounts..." -- bash -c '
-  printf "%s\n" "root:$1" | arch-chroot /mnt chpasswd
+  # Pass passwords via stdin to chpasswd to avoid exposure in process lists
+  printf "root:%s\n" "$1" | arch-chroot /mnt chpasswd
   arch-chroot /mnt useradd -m -s /usr/bin/zsh "$2"
-  printf "%s\n" "$2:$3" | arch-chroot /mnt chpasswd
+  printf "%s:%s\n" "$2" "$3" | arch-chroot /mnt chpasswd
 ' _ "$ROOT_PASS" "$USERNAME" "$USER_PASS"
 
 # 4. SUDOERS CONFIGURATION
@@ -50,16 +50,19 @@ fi
 # 5. DOTFILES & PAYLOAD DEPLOYMENT
 REPO_URL="https://github.com/grewstad/chrome-unnamed.git"
 gum spin --title "Fetching dotfiles from GitHub..." -- bash -c '
+  rm -rf /tmp/payload_repo
   git clone --depth 1 "$1" /tmp/payload_repo &>/dev/null
-  mkdir -p /mnt/home/"$2"/.config
-  cp -r /tmp/payload_repo/payload/.config/* /mnt/home/"$2"/.config/
+  if [ -d "/tmp/payload_repo/payload/.config" ]; then
+    mkdir -p /mnt/home/"$2"/.config
+    cp -rn /tmp/payload_repo/payload/.config/* /mnt/home/"$2"/.config/
+  fi
   arch-chroot /mnt chown -R "$2":"$2" /home/"$2"/
   rm -rf /tmp/payload_repo
 ' _ "$REPO_URL" "$USERNAME"
 
 # 6. SHELL POLISH
 gum spin --title "Finalizing shell settings..." -- bash -c "
-  touch /mnt/home/${USERNAME}/.zshrc
+  [ ! -f /mnt/home/${USERNAME}/.zshrc ] && touch /mnt/home/${USERNAME}/.zshrc
   arch-chroot /mnt chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.zshrc
 "
 

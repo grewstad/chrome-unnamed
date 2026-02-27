@@ -1,4 +1,5 @@
-# chrome-unnamed: Disk Module (Robust Manual selection)
+#!/bin/bash
+# chrome-unnamed: Disk Module (Opinionated Btrfs + Chain-Booting)
 
 # 1. MODE SELECTION
 MODE=$(gum choose "Pre-partitioned (Select existing partitions)" "Manual Partitioning (Run cfdisk)")
@@ -55,6 +56,13 @@ select_partition() {
   fi
 }
 
+# 3. FLASHING INSTRUCTIONS
+ISO=$(find out/ -maxdepth 1 -name "*.iso" -print -quit)
+if [ -z "$ISO" ]; then
+    echo "Error: No ISO found in out/"
+    exit 1
+fi
+
 # --- MANDATORY SELECTION ---
 PART_ROOT=$(select_partition "Select ROOT (/) partition")
 if [ -z "$PART_ROOT" ]; then return 1; fi
@@ -77,29 +85,16 @@ if gum confirm "Use a separate /home partition?"; then
   fi
 fi
 
-HAS_MANUAL_BOOT=false
-if gum confirm "Use a separate /boot partition? (Recommended for complex setups)"; then
-  PART_BOOT=$(select_partition "Select /boot partition")
-  if [ -n "$PART_BOOT" ]; then
-    MOUNTS["$PART_BOOT"]="/boot"
-    HAS_MANUAL_BOOT=true
+# Note: /boot is NOT a separate partition by default to support chain-booting kernels from root Btrfs.
+# But we allow a manual boot partition if the user really wants it.
+if gum confirm "Use a separate /boot partition? (Not recommended for simple chain-booting)"; then
+  if select_partition "Select /boot partition" > /dev/null; then
+     # We already selected it via select_partition, but we don't actually need the variable if we rely on MOUNTS
+     echo "Separate /boot partition added."
   fi
 fi
 
-while gum confirm "Add another custom mount point?"; do
-  MNT_POINT=$(gum input --placeholder "Enter mount point (e.g. /data)")
-  if [ -n "$MNT_POINT" ]; then
-    PART_CUSTOM=$(select_partition "Select partition for $MNT_POINT")
-    if [ -n "$PART_CUSTOM" ]; then
-      MOUNTS["$PART_CUSTOM"]="$MNT_POINT"
-    fi
-  else
-    break
-  fi
-done
-
 # --- SWAP DETECTION ---
-# Do this BEFORE formatting/mounting so the user can confirm via TUI.
 SWAP_PART=$(lsblk -plno NAME,TYPE,FSTYPE | awk '$2=="part" && $3=="swap" {print $1}' | head -n1)
 ENABLE_SWAP=false
 if [ -n "$SWAP_PART" ]; then
@@ -115,15 +110,11 @@ for part in "${!MOUNTS[@]}"; do
     if gum confirm "Format $part as FAT32? (CAUTION: this erases existing bootloaders)"; then
       gum spin --title "Formatting $part as FAT32..." -- mkfs.fat -F32 "$part"
     fi
-  elif [ "$mnt" == "/" ] || [ "$mnt" == "/boot" ]; then
-    gum style --foreground 214 "Enforcing Btrfs for $mnt to ensure a clean wipe..."
-    if gum confirm "Wipe and format $part as btrfs for $mnt? (WARNING: total data loss)"; then
-      gum spin --title "Formatting $part as btrfs..." -- mkfs.btrfs -f "$part"
-    fi
   else
-    if gum confirm "Format $part for $mnt? (WARNING: data loss)"; then
-      FS=$(gum choose "btrfs" "ext4" "xfs")
-      gum spin --title "Formatting $part as $FS..." -- mkfs."$FS" -f "$part"
+    # Opinionated: Always use Btrfs for everything else
+    gum style --foreground 214 "Enforcing Btrfs for $mnt to ensure a clean wipe..."
+    if gum confirm "Wipe and format $part as Btrfs for $mnt? (WARNING: total data loss)"; then
+      gum spin --title "Formatting $part as Btrfs..." -- mkfs.btrfs -f "$part"
     fi
   fi
 done
@@ -131,46 +122,45 @@ done
 udevadm settle
 
 # 4. EXECUTION: MOUNTING
-# Mount root first, then create Btrfs subvolumes if needed.
-# We pass variables as positional parameters to bash -c to avoid premature expansion.
+# Mount root first, then create Btrfs subvolumes.
 gum spin --title "Mounting root filesystem..." -- bash -c '
   set -e
   mount "$1" /mnt
 
-  # Check filesystem AFTER mounting to avoid premature expansion issues
-  if lsblk -no FSTYPE "$1" | grep -q "btrfs"; then
-    btrfs subvolume create /mnt/@ &>/dev/null || true
+  # Force Btrfs subvolume layout
+  btrfs subvolume create /mnt/@ &>/dev/null || true
+  if [ "$2" != "true" ]; then
     btrfs subvolume create /mnt/@home &>/dev/null || true
-    umount /mnt
-    udevadm settle
-    mount -o compress=zstd:3,noatime,autodefrag,subvol=@ "$1" /mnt
+  fi
+  
+  umount /mnt
+  udevadm settle
+  
+  # Re-mount with @ subvolume
+  mount -o compress=zstd:3,noatime,autodefrag,subvol=@ "$1" /mnt
+  
+  if [ "$2" != "true" ]; then
     mkdir -p /mnt/home
-    # Only mount internal @home if a separate partition was NOT chosen
-    if [ "$2" != "true" ]; then
-      mount -o compress=zstd:3,noatime,autodefrag,subvol=@home "$1" /mnt/home
-    fi
+    mount -o compress=zstd:3,noatime,autodefrag,subvol=@home "$1" /mnt/home
   fi
 ' _ "$PART_ROOT" "$HAS_MANUAL_HOME"
 
-# Mount other partitions in a safe order
-# (EFI and BOOT should be mounted after ROOT)
+# Mount EFI and optional Boot
 for part in "${!MOUNTS[@]}"; do
   mnt="${MOUNTS[$part]}"
-  if [ "$mnt" == "/" ]; then continue; fi
-  if [ "$mnt" == "/home" ] && lsblk -no FSTYPE "$PART_ROOT" | grep -q "btrfs" && [ "$HAS_MANUAL_HOME" != "true" ]; then
-     # Skip as it was handled above
-     continue
+  if [ "$mnt" == "/" ] || { [ "$mnt" == "/home" ] && [ "$HAS_MANUAL_HOME" != "true" ]; }; then
+    continue 
   fi
 
-  gum spin --title "Mounting $part → $mnt..." -- bash -c '
+  gum spin --title "Mounting $part -> $mnt..." -- bash -c '
     mkdir -p /mnt"$2"
     mount "$1" /mnt"$2"
   ' _ "$part" "$mnt"
 done
 
-# Enable swap now that TUI prompts are done
+# Enable swap
 if [ "$ENABLE_SWAP" == "true" ]; then
   gum spin --title "Enabling swap ($SWAP_PART)..." -- swapon "$SWAP_PART"
 fi
 
-gum style --foreground 82 "Mounting complete. All partitions mapped and secured."
+gum style --foreground 82 "Mounting complete. Using chain-booting compatible layout."
