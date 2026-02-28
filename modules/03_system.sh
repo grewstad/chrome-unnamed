@@ -69,11 +69,11 @@ ROOT_UUID=$(lsblk -no UUID "$ROOT_PART")
 
 # Detect CPU for microcode
 UCODE=""
-if grep -q "Intel" /proc/cpuinfo; then
+# Use -m 1 to avoid multiple lines if CPU has many cores
+if grep -qi "Intel" /proc/cpuinfo; then
     UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/boot/intel-ucode.img"
-    # Fallback if /boot is separate
     if findmnt /mnt/boot &>/dev/null; then UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/intel-ucode.img"; fi
-elif grep -q "AMD" /proc/cpuinfo; then
+elif grep -qi "AMD" /proc/cpuinfo; then
     UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/boot/amd-ucode.img"
     if findmnt /mnt/boot &>/dev/null; then UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/amd-ucode.img"; fi
 fi

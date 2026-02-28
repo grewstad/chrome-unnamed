@@ -10,20 +10,28 @@ source "modules/00_helpers.sh"
 
 # 1. USER PROMPTS
 # Collect all credentials before entering the long-running execution phase.
-ROOT_PASS=$(gum input --password --placeholder "Set Administrator (Root) password")
-if [ -z "$ROOT_PASS" ]; then
-  gum style --foreground 15 "[SEC] FATAL: Root password required. Authorization failure."
-  return 1
-fi
+while true; do
+  ROOT_PASS=$(gum input --password --placeholder "Set Root password")
+  ROOT_PASS_CONFIRM=$(gum input --password --placeholder "Confirm Root password")
+  if [ "$ROOT_PASS" == "$ROOT_PASS_CONFIRM" ] && [ -n "$ROOT_PASS" ]; then
+    break
+  else
+    gum style --foreground 15 "Passwords do not match or are empty. Please retry."
+  fi
+done
 
 USERNAME=$(gum input --placeholder "Enter Username (e.g. grewstad)")
 if [ -z "$USERNAME" ]; then USERNAME="user"; fi
 
-USER_PASS=$(gum input --password --placeholder "Set password for user $USERNAME")
-if [ -z "$USER_PASS" ]; then
-  gum style --foreground 15 "[SEC] FATAL: User password required. Authorization failure."
-  return 1
-fi
+while true; do
+  USER_PASS=$(gum input --password --placeholder "Set password for user $USERNAME")
+  USER_PASS_CONFIRM=$(gum input --password --placeholder "Confirm password for user $USERNAME")
+  if [ "$USER_PASS" == "$USER_PASS_CONFIRM" ] && [ -n "$USER_PASS" ]; then
+    break
+  else
+    gum style --foreground 15 "Passwords do not match or are empty. Please retry."
+  fi
+done
 
 SUDO_ACCESS=$(gum confirm "Grant $USERNAME administrative (sudo) privileges?" && echo "yes" || echo "no")
 

@@ -41,9 +41,11 @@ echo "PRE-FLIGHT: Ensuring clean workspace..."
 sudo rm -rf out/ work/
 
 # Check for disk space (need ~10GB for a safe build)
-SPACE=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
-if [ "$SPACE" -lt 10 ]; then
-    echo "WARNING: You only have ${SPACE}GB free. archiso usually needs ~10GB."
+# Use -P for POSIX compatibility to avoid line wrapping issues
+SPACE=$(df -P . | awk 'NR==2 {print $4}')
+# df -P output is in 1024-byte blocks. 10GB = 10 * 1024 * 1024 blocks.
+if [ "$SPACE" -lt 10485760 ]; then
+    echo "WARNING: You have less than 10GB free. archiso usually needs ~10GB."
     read -p "Continue anyway? (y/n) " -n 1 -r
     echo
     [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1

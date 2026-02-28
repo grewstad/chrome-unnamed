@@ -8,13 +8,13 @@
 set -e
 source "modules/00_helpers.sh"
 
-# 1. TOPOLOGICAL OVERRIDE
-MODE=$(gum choose "Pre-partitioned (Mount existing topological map)" "Manual override (Launch cfdisk map editor)")
+# 1. PARTITIONING OVERRIDE (Optional)
+MODE=$(gum choose "Use existing partitions" "Manual partitioning (cfdisk)")
 
-if [ "$MODE" == "Manual Partitioning (Run cfdisk)" ]; then
+if [ "$MODE" == "Manual partitioning (cfdisk)" ]; then
   DISK_LIST=$(lsblk -dno NAME,SIZE,MODEL | grep -v "loop" | grep -v "sr")
-  SELECTED_DISK_LINE=$(echo "$DISK_LIST" | gum choose --header "Select target drive for re-formatting")
-  SELECTED_DISK=$(echo "$SELECTED_DISK_LINE" | awk '{print $1}' | sed 's|^[^/]*||')
+  SELECTED_DISK_LINE=$(echo "$DISK_LIST" | gum choose --header "Select target drive")
+  SELECTED_DISK=$(clean_path "$SELECTED_DISK_LINE")
 
   if [ -n "$SELECTED_DISK" ]; then
     cfdisk "$SELECTED_DISK"
@@ -63,13 +63,6 @@ select_partition() {
     echo "$selected"
   fi
 }
-
-# 3. FLASHING INSTRUCTIONS
-ISO=$(find out/ -maxdepth 1 -name "*.iso" -print -quit)
-if [ -z "$ISO" ]; then
-    echo "Error: No ISO found in out/"
-    exit 1
-fi
 
 # --- REQUIRED PARTITIONS ---
 PART_ROOT=$(select_partition "Select ROOT (/) partition")
@@ -129,9 +122,9 @@ done
 
 udevadm settle
 
-# 4. TOPOLOGICAL MOUNTING
-# Mount root first, then orchestrate Btrfs subvolumes.
-gum spin --title "Mounting base topographical structure..." -- bash -c '
+# 4. FILESYSTEM MOUNTING
+# Mount root first, then create and mount Btrfs subvolumes.
+gum spin --title "Mounting filesystem structure..." -- bash -c '
   set -e
   mount "$1" /mnt
 
