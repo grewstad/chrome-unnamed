@@ -11,7 +11,8 @@ source "modules/00_helpers.sh"
 # 1. BASE SYSTEM DEPLOYMENT (PACSTRAP)
 gum spin --title "Injecting Arch Linux Zen Core... [Optimizing for low-latency workloads]" -- \
   pacstrap -K /mnt base linux-zen linux-firmware intel-ucode amd-ucode \
-    btrfs-progs limine networkmanager nvim sudo efibootmgr zram-generator --noconfirm
+    btrfs-progs limine networkmanager nvim sudo efibootmgr zram-generator \
+    bash-completion zsh-completions --noconfirm
 
 gum style --foreground 10 " [OK] Base system components successfully injected."
 
