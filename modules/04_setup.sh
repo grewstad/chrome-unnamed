@@ -4,7 +4,7 @@
 # 1. INTERACTIVE PROMPTS — collect everything before making changes
 ROOT_PASS=$(gum input --password --placeholder "Set Root Password")
 if [ -z "$ROOT_PASS" ]; then
-  gum style --foreground 196 "Root password cannot be empty. Aborting."
+  gum style --foreground 15 "Root password cannot be empty. Aborting."
   return 1
 fi
 
@@ -13,7 +13,7 @@ if [ -z "$USERNAME" ]; then USERNAME="user"; fi
 
 USER_PASS=$(gum input --password --placeholder "Set Password for $USERNAME")
 if [ -z "$USER_PASS" ]; then
-  gum style --foreground 196 "User password cannot be empty. Aborting."
+  gum style --foreground 15 "User password cannot be empty. Aborting."
   return 1
 fi
 
@@ -66,4 +66,4 @@ gum spin --title "Finalizing shell settings..." -- bash -c "
   arch-chroot /mnt chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.zshrc
 "
 
-gum style --foreground 82 "Setup complete. User ${USERNAME} created with Zsh and custom dotfiles."
+gum style --foreground 15 "Setup complete. User ${USERNAME} created with Zsh and custom dotfiles."

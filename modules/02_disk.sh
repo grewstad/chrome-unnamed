@@ -7,7 +7,7 @@ MODE=$(gum choose "Pre-partitioned (Select existing partitions)" "Manual Partiti
 if [ "$MODE" == "Manual Partitioning (Run cfdisk)" ]; then
   DISK_LIST=$(lsblk -dno NAME,SIZE,MODEL | grep -v "loop" | grep -v "sr")
   SELECTED_DISK_LINE=$(echo "$DISK_LIST" | gum choose --header "Select Disk for Partitioning")
-  SELECTED_DISK="/dev/$(echo "$SELECTED_DISK_LINE" | awk '{print $1}')"
+  SELECTED_DISK=$(echo "$SELECTED_DISK_LINE" | awk '{print $1}' | sed 's|^[^/]*||')
 
   if [ -n "$SELECTED_DISK" ]; then
     cfdisk "$SELECTED_DISK"
@@ -18,7 +18,7 @@ fi
 PART_LIST=$(lsblk -plno NAME,SIZE,TYPE,FSTYPE,LABEL | grep "part")
 
 if [ -z "$PART_LIST" ]; then
-  gum style --foreground 196 "No partitions found. Please partition your disk first."
+  gum style --foreground 15 "No partitions found. Please partition your disk first."
   return 1
 fi
 
@@ -48,7 +48,8 @@ select_partition() {
   local selected_raw
   selected_raw=$(echo "$choices" | gum choose --header "$prompt")
   local selected
-  selected=$(echo "$selected_raw" | awk '{print $1}')
+  # Format output to a usable drive name by stripping tree characters (|- or └─)
+  selected=$(echo "$selected_raw" | awk '{print $1}' | sed 's|^[^/]*||')
 
   if [ -n "$selected" ]; then
     USED_PARTS+=("$selected")
@@ -70,7 +71,7 @@ MOUNTS["$PART_ROOT"]="/"
 
 PART_EFI=$(select_partition "Select EFI partition (usually vfat, 100MB–512MB)")
 if [ -z "$PART_EFI" ]; then
-  gum style --foreground 196 "ERROR: No EFI partition selected. Aborting."
+  gum style --foreground 15 "ERROR: No EFI partition selected. Aborting."
   return 1
 fi
 MOUNTS["$PART_EFI"]="/efi"
@@ -112,7 +113,7 @@ for part in "${!MOUNTS[@]}"; do
     fi
   else
     # Opinionated: Always use Btrfs for everything else
-    gum style --foreground 214 "Enforcing Btrfs for $mnt to ensure a clean wipe..."
+    gum style --foreground 15 "Enforcing Btrfs for $mnt to ensure a clean wipe..."
     if gum confirm "Wipe and format $part as Btrfs for $mnt? (WARNING: total data loss)"; then
       gum spin --title "Formatting $part as Btrfs..." -- mkfs.btrfs -f "$part"
     fi
@@ -163,4 +164,4 @@ if [ "$ENABLE_SWAP" == "true" ]; then
   gum spin --title "Enabling swap ($SWAP_PART)..." -- swapon "$SWAP_PART"
 fi
 
-gum style --foreground 82 "Mounting complete. Using chain-booting compatible layout."
+gum style --foreground 15 "Mounting complete. Using chain-booting compatible layout."

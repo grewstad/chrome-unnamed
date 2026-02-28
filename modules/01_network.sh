@@ -4,7 +4,7 @@
 
 # 1. PRE-FLIGHT CHECK
 if ping -c 1 1.1.1.1 &>/dev/null; then
-  gum style --foreground 82 "System is already online."
+  gum style --foreground 15 "System is already online."
   return 0
 fi
 
@@ -27,7 +27,7 @@ while true; do
       NETWORKS=$(nmcli -t -f SSID dev wifi list 2>/dev/null | grep -v '^$' | sort -u)
 
       if [ -z "$NETWORKS" ]; then
-        gum style --foreground 196 "No networks found."
+        gum style --foreground 15 "No networks found."
         CHOICE=$(gum choose "Retry Scan" "Go Back")
         if [ "$CHOICE" == "Retry Scan" ]; then
           gum spin --title "Rescanning..." -- bash -c "nmcli dev wifi rescan && sleep 3"
@@ -46,7 +46,7 @@ while true; do
       if gum spin --title "Connecting to $SSID..." -- nmcli dev wifi connect "$SSID" password "$PASS"; then
         break 2 # Connected! Exit both Wi-Fi and Main loops
       else
-        gum style --foreground 196 "Connection failed. Wrong password?"
+        gum style --foreground 15 "Connection failed. Wrong password?"
         CHOICE=$(gum choose "Retry" "Go Back")
         if [ "$CHOICE" == "Go Back" ]; then
           break # Exit Wi-Fi loop
@@ -61,7 +61,7 @@ while true; do
     ;;
 
   "Skip (Offline Mode)")
-    gum style --foreground 214 "⚠  Warning: Proceeding without a network."
+    gum style --foreground 15 "⚠  Warning: Proceeding without a network."
     return 0
     ;;
   esac
@@ -69,8 +69,8 @@ done
 
 # 4. VERIFICATION
 if ! ping -c 1 1.1.1.1 &>/dev/null; then
-  gum style --foreground 196 "Connection failed. Please check credentials or hardware."
+  gum style --foreground 15 "Connection failed. Please check credentials or hardware."
   return 1
 fi
 
-gum style --foreground 82 "Handshake Successful. Online."
+gum style --foreground 15 "Handshake Successful. Online."

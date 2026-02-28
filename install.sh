@@ -1,7 +1,7 @@
 #!/bin/bash
 # Chrome-Unnamed: Main Installer Entry Point
 set -e
-trap 'gum style --foreground 196 "CRITICAL ERROR: Installer crashed or a command failed. Aborting." ; exit 1' ERR
+trap 'gum style --foreground 15 "CRITICAL ERROR: Installer crashed or a command failed. Aborting." ; exit 1' ERR
 
 # 1. BOOTSTRAP
 if ! command -v gum &>/dev/null; then
@@ -19,19 +19,25 @@ done
 
 # 2. PREREQUISITES & SAFETY CHECKS
 if [ ! -d "/sys/firmware/efi/efivars" ]; then
-    gum style --foreground 196 "ERROR: System not booted in UEFI mode. This installer requires UEFI."
+    gum style --foreground 15 "ERROR: System not booted in UEFI mode. This installer requires UEFI."
     exit 1
 fi
 
-# 3. WELCOME & OPTIMIZATION
+# 3. WELCOME & NETWORK
 gum style \
-	--foreground 212 --border-foreground 212 --border double \
+	--foreground 15 --border-foreground 15 --border double --bold \
 	--align center --width 50 --margin "1 2" --padding "2 4" \
 	"CHROME-UNNAMED" "Arch Linux Installer"
 
+source "modules/01_network.sh"
+
 if gum confirm "Optimize mirrorlist before starting (Recommended)?"; then
-    gum spin --title "Optimizing mirrors (reflector)..." -- \
-        reflector --latest 20 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+    if nm-online -t 5 >/dev/null; then
+        gum spin --title "Optimizing mirrors (reflector)..." -- \
+            reflector --latest 20 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+    else
+        gum style --foreground 15 "Warning: Network offline, skipping mirror optimization."
+    fi
 fi
 
 # 4. KEYBOARD LAYOUT
@@ -43,7 +49,6 @@ gum spin --title "Applying keymap $KEYMAP..." -- loadkeys "$KEYMAP"
 
 # 5. EXECUTION
 modules=(
-  "modules/01_network.sh"
   "modules/02_disk.sh"
   "modules/03_system.sh"
   "modules/04_setup.sh"

@@ -52,7 +52,7 @@ gum spin --title "Installing Limine EFI files..." -- bash -c "
 # Chain-booting: Kernels are usually in /boot on the ROOT partition.
 KERNEL_PART=$(findmnt -vno SOURCE /mnt/boot 2>/dev/null || findmnt -vno SOURCE /mnt)
 if [ -z "$KERNEL_PART" ]; then 
-    gum style --foreground 196 "ERROR: Could not find kernel partition."
+    gum style --foreground 15 "ERROR: Could not find kernel partition."
     exit 1
 fi
 
@@ -92,4 +92,4 @@ gum spin --title "Registering UEFI boot entry..." -- \
     --label 'Chrome-Unnamed (Limine)' \
     --unicode
 
-gum style --foreground 82 "Limine installed and registered in UEFI firmware successfully."
+gum style --foreground 15 "Limine installed and registered in UEFI firmware successfully."
