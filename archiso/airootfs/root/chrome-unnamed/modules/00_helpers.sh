@@ -26,10 +26,16 @@ profile_hardware() {
 # Advanced device path sanitation
 clean_path() {
   local input="$1"
-  # 1. Grab first segment (awk skips leading spaces)
-  # 2. Remove tree decorators (characters like ├, ─, └)
+  # 1. Grab first segment
+  # 2. Extract only the path part (e.g., /dev/sda1) or just the name (sda1)
   # 3. Ensure it starts with /dev/ and remove double slashes
-  echo "$input" | awk '{print $1}' | sed 's/^[[:punct:][:space:]]*//' | sed -E 's|^(/dev/)?|/dev/|; s|^/dev//dev/|/dev/|' | tr -d ' \n\r\t'
+  local name
+  name=$(echo "$input" | awk '{print $1}' | sed 's/.*[[:punct:]]//g; s/.*└//; s/.*├//; s/.*─//')
+  # If it doesn't start with /dev/, prepend it. 
+  if [[ ! "$name" =~ ^/dev/ ]]; then
+    name="/dev/$name"
+  fi
+  echo "$name" | sed 's|^/dev//dev/|/dev/|' | tr -d ' \n\r\t'
 }
 
 # Export these so subshells can find them if needed

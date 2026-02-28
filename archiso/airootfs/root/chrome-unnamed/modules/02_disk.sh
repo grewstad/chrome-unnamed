@@ -9,6 +9,7 @@ set -e
 source "modules/00_helpers.sh"
 
 # 1. PARTITIONING OVERRIDE (Optional)
+stty sane
 MODE=$(gum choose "Use existing partitions" "Manual partitioning (cfdisk)")
 
 if [ "$MODE" == "Manual partitioning (cfdisk)" ]; then
@@ -22,7 +23,10 @@ if [ "$MODE" == "Manual partitioning (cfdisk)" ]; then
 fi
 
 # 2. DEVICE DISCOVERY
-PART_LIST=$(lsblk -plno NAME,SIZE,TYPE,FSTYPE,LABEL | grep "part")
+# We use a spinner here because disk probing can occasionally hang or take time
+# Using -pf for a detailed human-readable view (FSTYPE, LABEL, UUID)
+gum spin --title "Probing hardware for partitions [Visual Mapping]..." -- bash -c 'lsblk -pfplno NAME,SIZE,TYPE,FSTYPE,LABEL,UUID | grep "part" > /tmp/part_list'
+PART_LIST=$(cat /tmp/part_list)
 
 if [ -z "$PART_LIST" ]; then
   gum style --foreground 15 "[DISK] No partitions detected. Please partition the drive first."
@@ -52,15 +56,15 @@ select_partition() {
     return 1
   fi
 
-  local selected_raw
+  stty sane
   selected_raw=$(echo "$choices" | gum choose --header "$prompt")
   local selected
-  # Leverage global helper to ensure 100% path accuracy
   selected=$(clean_path "$selected_raw")
 
   if [ -n "$selected" ]; then
     USED_PARTS+=("$selected")
     echo "$selected"
+    gum style --foreground 10 " [OK] Vector assigned: $selected"
   fi
 }
 
@@ -71,7 +75,7 @@ MOUNTS["$PART_ROOT"]="/"
 
 PART_EFI=$(select_partition "Select EFI partition (FAT32)")
 if [ -z "$PART_EFI" ]; then
-  gum style --foreground 15 "[DISK] FATAL: EFI partition missing. System will not boot."
+  gum style --foreground 9 " [FATAL] EFI partition missing. Boot impossible."
   return 1
 fi
 MOUNTS["$PART_EFI"]="/efi"
@@ -124,12 +128,15 @@ udevadm settle
 
 # 4. FILESYSTEM MOUNTING
 # Mount root first, then create and mount Btrfs subvolumes.
-gum spin --title "Mounting filesystem structure..." -- bash -c '
+gum spin --title "Mounting filesystem structure [Optimizing Btrfs Topology]..." -- bash -c '
   set -e
   mount "$1" /mnt
 
-  # Force Btrfs subvolume layout
+  # Advanced Subvolume Layout (EndeavourOS inspired)
   btrfs subvolume create /mnt/@ &>/dev/null || true
+  btrfs subvolume create /mnt/@cache &>/dev/null || true
+  btrfs subvolume create /mnt/@log &>/dev/null || true
+  
   if [ "$2" != "true" ]; then
     btrfs subvolume create /mnt/@home &>/dev/null || true
   fi
@@ -137,12 +144,20 @@ gum spin --title "Mounting filesystem structure..." -- bash -c '
   umount /mnt
   udevadm settle
   
+  # Standardized Pro-Spec Mount Options
+  MOUNT_OPTS="noatime,compress=zstd:3,autodefrag,discard=async"
+  
   # Re-mount with @ subvolume
-  mount -o compress=zstd:3,noatime,autodefrag,subvol=@ "$1" /mnt
+  mount -o $MOUNT_OPTS,subvol=@ "$1" /mnt
+  
+  # Mount auxiliary subvolumes
+  mkdir -p /mnt/var/cache /mnt/var/log
+  mount -o $MOUNT_OPTS,subvol=@cache "$1" /mnt/var/cache
+  mount -o $MOUNT_OPTS,subvol=@log "$1" /mnt/var/log
   
   if [ "$2" != "true" ]; then
     mkdir -p /mnt/home
-    mount -o compress=zstd:3,noatime,autodefrag,subvol=@home "$1" /mnt/home
+    mount -o $MOUNT_OPTS,subvol=@home "$1" /mnt/home
   fi
 ' _ "$PART_ROOT" "$HAS_MANUAL_HOME"
 
@@ -153,10 +168,10 @@ for part in "${!MOUNTS[@]}"; do
     continue 
   fi
 
-  gum spin --title "Mounting $part -> $mnt..." -- bash -c '
-    mkdir -p /mnt"$2"
-    mount "$1" /mnt"$2"
-  ' _ "$part" "$mnt"
+  gum spin --title "Mounting $part -> $mnt..." -- bash -c "
+    mkdir -p /mnt$2
+    mount $1 /mnt$2
+  " _ "$part" "$mnt"
 done
 
 # Enable swap
@@ -164,4 +179,4 @@ if [ "$ENABLE_SWAP" == "true" ]; then
   gum spin --title "Enabling swap on $SWAP_PART..." -- swapon "$SWAP_PART"
 fi
 
-gum style --foreground 15 "[DISK] Filesystem structure established and mounted."
+gum style --foreground 10 " [OK] Filesystem topology mounted and verified."
