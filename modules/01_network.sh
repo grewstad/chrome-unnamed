@@ -11,13 +11,13 @@ source "modules/00_helpers.sh"
 
 # 1. PRE-FLIGHT CHECK
 if ping -c 1 1.1.1.1 &>/dev/null; then
-  gum style --foreground 15 "[NET] Link established. System is online."
+  gum style --foreground 15 "[NET] Connection established. System is online."
   return 0
 fi
 
-# 2. HARDWARE ENERGIZATION
-# Unblock wireless radios and trigger an explicit spectrum sweep.
-gum spin --title "Energizing network interfaces..." -- bash -c "
+# 2. HARDWARE INITIALIZATION
+# Unblock wireless radios and trigger an explicit scan.
+gum spin --title "Initializing network hardware..." -- bash -c "
   rfkill unblock all
   nmcli networking on
   nmcli dev wifi rescan 2>/dev/null
@@ -34,13 +34,13 @@ while true; do
       NETWORKS=$(nmcli -t -f SSID dev wifi list 2>/dev/null | grep -v '^$' | sort -u)
 
       if [ -z "$NETWORKS" ]; then
-        gum style --foreground 15 "[NET] Void detected. No access points found."
-        CHOICE=$(gum choose "Sweep Spectrum" "Abort")
-        if [ "$CHOICE" == "Sweep Spectrum" ]; then
-          gum spin --title "Sweeping spectrum..." -- bash -c "nmcli dev wifi rescan && sleep 3"
+        gum style --foreground 15 "[NET] No access points found."
+        CHOICE=$(gum choose "Rescan" "Abort")
+        if [ "$CHOICE" == "Rescan" ]; then
+          gum spin --title "Rescanning..." -- bash -c "nmcli dev wifi rescan && sleep 3"
           continue
         else
-          break # Exit Wi-Fi loop to main overmind
+          break # Exit Wi-Fi loop
         fi
       fi
 
@@ -49,12 +49,12 @@ while true; do
         break
       fi
 
-      PASS=$(gum input --password --placeholder "Provide decryption key for uplink (blank if open)")
-      if gum spin --title "Establishing secure handshake with $SSID..." -- nmcli dev wifi connect "$SSID" password "$PASS"; then
-        break 2 # Connected! Break back to main pipeline
+      PASS=$(gum input --password --placeholder "Enter Wi-Fi password (blank if open)")
+      if gum spin --title "Connecting to $SSID..." -- nmcli dev wifi connect "$SSID" password "$PASS"; then
+        break 2 # Connected!
       else
-        gum style --foreground 15 "[NET] Handshake failed. Decryption key invalid?"
-        CHOICE=$(gum choose "Retry Handshake" "Abort")
+        gum style --foreground 15 "[NET] Connection failed. Incorrect password?"
+        CHOICE=$(gum choose "Retry" "Abort")
         if [ "$CHOICE" == "Abort" ]; then
           break
         fi
@@ -74,10 +74,10 @@ while true; do
   esac
 done
 
-# 4. UPLINK VERIFICATION
+# 4. CONNECTION VERIFICATION
 if ! ping -c 1 1.1.1.1 &>/dev/null; then
-  gum style --foreground 15 "[NET] FATAL: Connection to the matrix severed. Verify hardware."
+  gum style --foreground 15 "[NET] FATAL: Connection lost. Verify hardware."
   return 1
 fi
 
-gum style --foreground 15 "[NET] Neural link established. System is online."
+gum style --foreground 15 "[NET] Network connection established. Online."

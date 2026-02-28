@@ -12,14 +12,16 @@ trap 'gum style --foreground 15 "CRITICAL FAULT: Deployment sequence interrupted
 
 # --- GLOBAL TELEMETRY & HELPERS ---
 source "modules/00_helpers.sh"
+# LOG_FILE is defined in modules/00_helpers.sh as /root/chrome-unnamed/install.log
+
 echo "[INIT] Chrome-Unnamed Deployment Matrix Initialized at $(date)" > "$LOG_FILE"
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="5"
+BUILD_ITERATION="6"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
-  "CHROME-UNNAMED INDUSTRIAL GRADE HARDENED ISO (2026-02-28) - ITERATION $BUILD_ITERATION"
+  "CHROME-UNNAMED HARDENED ISO (2026-02-28) - ITERATION $BUILD_ITERATION"
 
 # 1. DEPENDENCY INJECTION
 # Ensure the TUI rendering engine (gum) is present in the live environment.
@@ -94,11 +96,15 @@ for module in "${modules[@]}"; do
 done
 
 # 6. TELEMETRY PERSISTENCE & FINALIZE
-echo "[CORE] Copying installation forensic logs to installed filesystem..."
+echo "[CORE] Persisting installation logs to the local device..."
 # /mnt is active if module 02/03 succeeded
 if mountpoint -q /mnt; then
     mkdir -p /mnt/var/log/
     cp "$LOG_FILE" /mnt/var/log/chrome-unnamed-install.log 2>/dev/null || true
+    # Also copy to the user's home for immediate visibility
+    if [ -d "/mnt/home/$USERNAME" ]; then
+        cp "$LOG_FILE" "/mnt/home/$USERNAME/install.log" 2>/dev/null || true
+    fi
 fi
 
-gum confirm "Deployment sequence complete. System is primed. Jack out and reboot?" && reboot
+gum confirm "Deployment successful. System is primed. Reboot now?" && reboot

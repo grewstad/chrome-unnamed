@@ -49,7 +49,8 @@ if [ "$SPACE" -lt 10 ]; then
     [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
 fi
 
-sudo mkarchiso -v -w work/ -o out/ archiso/
+echo "BUILDING: Executing mkarchiso (this will take 5-15 mins). Check build.log for details."
+sudo mkarchiso -v -w work/ -o out/ archiso/ > build.log 2>&1
 
 # 3. AUTO-FLASH
 ISO=$(ls out/*.iso | head -n 1)
