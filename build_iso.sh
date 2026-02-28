@@ -13,8 +13,8 @@ fi
 # 2. BUILD
 echo "Starting ISO build process..."
 
-# Increment to V16 for Innovation refactor
-LOCAL_VER="16"
+# Increment to V17 for Hardening refactor
+LOCAL_VER="17"
 sed -i "s/BUILD_ITERATION=\".*\"/BUILD_ITERATION=\"$LOCAL_VER\"/" install.sh
 
 # Define targets

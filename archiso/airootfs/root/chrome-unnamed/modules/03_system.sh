@@ -9,15 +9,23 @@ set -e
 source "modules/00_helpers.sh"
 
 # 1. BASE SYSTEM DEPLOYMENT (PACSTRAP)
+# Omarchy Pattern: Injecting 'kernel-modules-hook' to prevent breakage after kernel updates
+# Divergence: Adding 'snapper' for deep snapshot integration
 gum spin --title "Injecting Arch Linux Zen Core... [Optimizing for low-latency workloads]" -- \
   pacstrap -K /mnt base linux-zen linux-firmware intel-ucode amd-ucode \
     btrfs-progs limine networkmanager nvim sudo efibootmgr zram-generator \
-    bash-completion zsh-completions --noconfirm
+    bash-completion zsh-completions kernel-modules-hook snapper --noconfirm
+
+# FIX: Move onboarding script to a globally accessible path (Major Bug #3)
+mkdir -p /mnt/usr/local/bin
+cp modules/06_onboarding.sh /mnt/usr/local/bin/chrome-onboard
+chmod +x /mnt/usr/local/bin/chrome-onboard
 
 gum style --foreground 10 " [OK] Base system components successfully injected."
 
 # 2. FILESYSTEM MAPPING (FSTAB)
-gum spin --title "Mapping filesystem structure (fstab)..." -- bash -c "genfstab -U /mnt >> /mnt/etc/fstab"
+# FIX: Use authoritative redirection (>) instead of append (>>) to prevent duplicates on retry
+gum spin --title "Mapping filesystem structure (fstab)..." -- bash -c "genfstab -U /mnt > /mnt/etc/fstab"
 
 # 3. LOCALE & HOSTNAME
 HOSTNAME=$(gum input --placeholder "Enter system hostname (e.g. archterra)")
@@ -45,19 +53,52 @@ gum spin --title "Configuring locale and timezone..." -- bash -c '
   arch-chroot /mnt hwclock --systohc
   arch-chroot /mnt locale-gen &>/dev/null
 
-  # Add Btrfs hook to mkinitcpio for faster/reliable boot
+  # Add Btrfs + Nvidia hooks to mkinitcpio for faster/reliable boot
+  # Major Bug #2: Nvidia KMS is required for Wayland/Hyprland stability
+  sed -i "s/^MODULES=(/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm /" /mnt/etc/mkinitcpio.conf
   sed -i "s/^HOOKS=(base udev/HOOKS=(base udev btrfs/" /mnt/etc/mkinitcpio.conf
 
   # Mkinitcpio: Ensure Btrfs hooks are active for the zen kernel
-  arch-chroot /mnt mkinitcpio -P &>/dev/null
-  arch-chroot /mnt systemctl enable NetworkManager &>/dev/null
+  # FIX: Redirect to install.log for transparency instead of /dev/null
+  arch-chroot /mnt mkinitcpio -P >> /mnt/root/chrome-unnamed/install.log 2>&1
+  arch-chroot /mnt systemctl enable NetworkManager >> /mnt/root/chrome-unnamed/install.log 2>&1
 
   # ZRAM Strategy (50% of RAM, zstd compression)
-  cat <<EOF > /mnt/etc/systemd/zram-generator.conf
+  # FIX: Idempotent configuration check
+  if [ ! -f /mnt/etc/systemd/zram-generator.conf ]; then
+    cat <<EOF > /mnt/etc/systemd/zram-generator.conf
 [zram0]
 zram-size = ram / 2
 compression-algorithm = zstd
 EOF
+  fi
+
+  # Modern Btrfs Swap (Linux 6.1+ Pattern)
+  # Instead of old dd/truncate, we use the specific Btrfs mkswapfile command
+  if [ ! -f /mnt/swap/swapfile ]; then
+    mkdir -p /mnt/swap
+    arch-chroot /mnt btrfs filesystem mkswapfile --size 4G /swap/swapfile >> /mnt/root/chrome-unnamed/install.log 2>&1
+    arch-chroot /mnt swapon /swap/swapfile
+    echo "/swap/swapfile none swap defaults 0 0" >> /mnt/etc/fstab
+  fi
+
+  # Enable the Kernel Module Hook for reliability
+  arch-chroot /mnt systemctl enable linux-modules-cleanup.service >> /mnt/root/chrome-unnamed/install.log 2>&1
+
+  # Snapper Integration (openSUSE Style Divergence)
+  # Minor Bug #5: Need to create .snapshots subvolume explicitly
+  if [ ! -d /mnt/.snapshots ]; then
+    btrfs subvolume create /mnt/.snapshots
+  fi
+  
+  # FIX: Idempotent snapper config
+  if [ ! -f /mnt/etc/snapper/configs/root ]; then
+    arch-chroot /mnt snapper -c root create-config / >> /mnt/root/chrome-unnamed/install.log 2>&1
+    # Optimization: Only keep last 5 hourly/daily snapshots for space
+    sed -i 's/TIMELINE_LIMIT_HOURLY=".*"/TIMELINE_LIMIT_HOURLY="5"/' /mnt/etc/snapper/configs/root
+    sed -i 's/TIMELINE_LIMIT_DAILY=".*"/TIMELINE_LIMIT_DAILY="5"/' /mnt/etc/snapper/configs/root
+    arch-chroot /mnt systemctl enable snapper-timeline.timer >> /mnt/root/chrome-unnamed/install.log 2>&1
+  fi
 ' _ "$HOSTNAME" "$KEYMAP"
 
 gum style --foreground 10 " [OK] Chronometrics and localization identity established."
@@ -96,11 +137,12 @@ elif grep -qi "AMD" /proc/cpuinfo; then
 fi
 
 # Hardcoded Btrfs Layout Detection (Paths start with /@ for subvolume support)
+# BUG FIX: Only prepend /@ if /boot is NOT a separate partition
 K_PATH="/@/boot/vmlinuz-linux-zen"
 I_PATH="/@/boot/initramfs-linux-zen.img"
 if findmnt /mnt/boot &>/dev/null; then
-  K_PATH="/@/vmlinuz-linux-zen"
-  I_PATH="/@/initramfs-linux-zen.img"
+  K_PATH="/vmlinuz-linux-zen"
+  I_PATH="/initramfs-linux-zen.img"
 fi
 
 arch-chroot /mnt bash -c 'cat <<EOF > /etc/limine.conf
@@ -113,6 +155,14 @@ TIMEOUT=5
     MODULE_PATH=uuid(${1}):${4}
     # Fix: Explicitly mount the root subvolume for the kernel
     CMDLINE=root=UUID=${5} rw loglevel=3 quiet rootflags=subvol=@
+
+:CHROME-UNNAMED [RESCUE-CORE]
+    PROTOCOL=linux
+    KERNEL_PATH=uuid(${1}):${2}
+    ${3}
+    MODULE_PATH=uuid(${1}):${4}
+    # Minor Bug #4: Remove 'quiet' from rescue mode for transparency
+    CMDLINE=root=UUID=${5} rw rootflags=subvol=@ single
 EOF
 ' _ "$KERNEL_UUID" "$K_PATH" "$UCODE" "$I_PATH" "$ROOT_UUID"
 

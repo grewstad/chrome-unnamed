@@ -4,7 +4,7 @@
 [mkarchiso] INFO:              Architecture:   x86_64
 [mkarchiso] INFO:         Working directory:   /home/grewstad/chrome-unnamed/work
 [mkarchiso] INFO:    Installation directory:   arch
-[mkarchiso] INFO:                Build date:   2026-02-28T16:39+0530
+[mkarchiso] INFO:                Build date:   2026-02-28T20:27+0530
 [mkarchiso] INFO:          Output directory:   /home/grewstad/chrome-unnamed/out
 [mkarchiso] INFO:        Current build mode:   iso
 [mkarchiso] INFO:               Build modes:   iso
@@ -771,7 +771,7 @@ installing nvme-cli...
 installing open-isns...
 installing open-iscsi...
 
->>> Setting Initiatorname 'iqn.2016-04.com.open-iscsi:9310ac2075ad'
+>>> Setting Initiatorname 'iqn.2016-04.com.open-iscsi:106dd9fc3b11'
 installing libdnet...
 installing libmspack...
 installing libsigc++...
@@ -1074,27 +1074,27 @@ mkfs.fat 4.2 (2021-01-31)
 [mkarchiso] INFO: Creating SquashFS image, this may take some time...
 Parallel mksquashfs: Using 12 processors
 Creating 4.0 filesystem on /home/grewstad/chrome-unnamed/work/iso/arch/x86_64/airootfs.sfs, block size 1048576.
-[/                                                           ]     0/56613   0%[========|                                                   ] 11600/79209  14%[==========|                                                 ] 14700/79209  18%Unrecognised xattr prefix system.posix_acl_default
+[/                                                           ]     0/55301   0%[=/                                                          ]  2200/79210   2%[==========\                                                 ] 14700/79210  18%Unrecognised xattr prefix system.posix_acl_default
 Unrecognised xattr prefix system.posix_acl_access
 Unrecognised xattr prefix system.posix_acl_default
 
-[===========================================================|] 79209/79209 100%
+[===========================================================-] 79210/79210 100%
 
 Exportable Squashfs 4.0 filesystem, xz compressed, data block size 1048576
 	compressed data, compressed metadata, compressed fragments,
 	compressed xattrs, compressed ids
 	duplicates are removed
-Filesystem size 999448.50 Kbytes (976.02 Mbytes)
-	48.27% of uncompressed filesystem size (2070750.41 Kbytes)
-Inode table size 651792 bytes (636.52 Kbytes)
-	20.11% of uncompressed inode table size (3240940 bytes)
-Directory table size 863346 bytes (843.11 Kbytes)
+Filesystem size 999450.28 Kbytes (976.03 Mbytes)
+	48.26% of uncompressed filesystem size (2070756.44 Kbytes)
+Inode table size 651804 bytes (636.53 Kbytes)
+	20.11% of uncompressed inode table size (3240972 bytes)
+Directory table size 863382 bytes (843.15 Kbytes)
 	34.65% of uncompressed directory table size (2491870 bytes)
 Xattr table size 78 bytes (0.08 Kbytes)
 	97.50% of uncompressed xattr table size (80 bytes)
 Number of duplicate files found 7173
-Number of inodes 93479
-Number of files 74725
+Number of inodes 93480
+Number of files 74726
 Number of fragments 1385
 Number of symbolic links 12025
 Number of device nodes 0
@@ -1139,18 +1139,18 @@ Number of gids 20
 [mkarchiso] INFO: Creating ISO image...
 xorriso 1.5.6 : RockRidge filesystem manipulator, libburnia project.
 
-xorriso : NOTE : Environment variable SOURCE_DATE_EPOCH encountered with value 1772276946
+xorriso : NOTE : Environment variable SOURCE_DATE_EPOCH encountered with value 1772290665
 Drive current: -outdev 'stdio:/home/grewstad/chrome-unnamed/out/archlinux-2026.02.28-x86_64.iso'
 Media current: stdio file, overwriteable
 Media status : is blank
-Media summary: 0 sessions, 0 data blocks, 0 data,  288g free
+Media summary: 0 sessions, 0 data blocks, 0 data,  287g free
 Added to ISO image: directory '/'='/home/grewstad/chrome-unnamed/work/iso'
 xorriso : UPDATE :     108 files added in 1 seconds
 xorriso : UPDATE :     108 files added in 1 seconds
 xorriso : NOTE : Copying to System Area: 432 bytes from file '/home/grewstad/chrome-unnamed/work/iso/boot/syslinux/isohdpfx.bin'
 libisofs: NOTE : Automatically adjusted MBR geometry to 1015/77/32
 libisofs: NOTE : Aligned image size to cylinder size by 281 blocks
-xorriso : UPDATE :  10.64% done
+xorriso : UPDATE :  11.27% done
 ISO image produced: 753768 sectors
 Written to medium : 753768 sectors at LBA 0
 Writing to 'stdio:/home/grewstad/chrome-unnamed/out/archlinux-2026.02.28-x86_64.iso' completed successfully.

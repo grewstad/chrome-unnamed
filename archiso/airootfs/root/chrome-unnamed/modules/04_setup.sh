@@ -40,11 +40,28 @@ SUDO_ACCESS=$(gum confirm "Grant $USERNAME administrative (sudo) privileges?" &&
 # 2. APPLICATION PAYLOAD
 APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber reflector zsh-autosuggestions zsh-syntax-highlighting"
 
-# Nvidia Driver Support
+# Nvidia Driver Support (Omarchy-Spec Advanced Probing)
 if lspci | grep -qi "nvidia"; then
   gum style --foreground 13 " [!] Nvidia GPU detected."
-  NV_CHOICE=$(gum choose "Nvidia Proprietary (Recommended for Hyprland)" "Nouveau (Open Source)" "Skip")
+  # Detect Turing+ architecture (16xx, 20xx, 30xx, 40xx)
+  # Turing/Ampere/Ada started with device IDs like 1e, 1f, 21, 22, 24, 25, 26, 27, 28
+  GPU_ID=$(lspci -n | grep "0300: 10de" | cut -d':' -f4 | cut -d' ' -f2)
+  if [[ "$GPU_ID" =~ ^(1e|1f|21|22|24|25|26|27|28) ]]; then
+    G_MSG="[Modern GPU Detected] Recommending Nvidia-Open-DKMS"
+    DEF_CHOICE="Nvidia-Open (Turing+)"
+  else
+    G_MSG="[Legacy/Pascal Detected] Recommending Nvidia-Proprietary"
+    DEF_CHOICE="Nvidia Proprietary"
+  fi
+  
+  gum style --foreground 15 "$G_MSG"
+  NV_CHOICE=$(gum choose "$DEF_CHOICE" "Nvidia Proprietary" "Nvidia-Open (Turing+)" "Nouveau (Open Source)" "Skip")
+  
   case "$NV_CHOICE" in
+    "Nvidia-Open"*)
+      APPS="$APPS nvidia-open-dkms nvidia-utils libva-nvidia-driver"
+      IS_NVIDIA=true
+      ;;
     "Nvidia Proprietary"*)
       APPS="$APPS nvidia-dkms nvidia-utils libva-nvidia-driver"
       IS_NVIDIA=true
@@ -64,17 +81,36 @@ else
   HAS_BATTERY=false
 fi
 
+# 5. SOFTWARE PAYLOAD & GAMING OPTIMIZATION (Omarchy++ Divergence)
+# Divergence: Intelligent Gaming Schedulers (scx-scheds)
+# We detect the CPU and install extensible schedulers for better-than-Zen performance.
+if grep -qiE "intel|amd" /proc/cpuinfo; then
+  APPS="$APPS scx-scheds"
+  gum style --foreground 14 " [⚡] CPU-Extensible Schedulers (scx) added to payload."
+fi
+
 gum spin --title "Ingesting production-grade packages... [Developer-Focused Omakase]" -- \
   pacstrap -K /mnt "$APPS" --noconfirm
 
-gum style --foreground 10 " [OK] Software payload deployed."
-
-# 2a. LAPTOP OPTIMIZATIONS
-if [ "$HAS_BATTERY" == "true" ]; then
-  gum spin --title "Optimizing for mobile hardware (TLP)..." -- \
-    arch-chroot /mnt systemctl enable tlp &>/dev/null
-  gum style --foreground 10 " [OK] Laptop power management profile active."
+# Enable scx_layered (multi-core optimized) by default if supported
+if arch-chroot /mnt which scx_layered &>/dev/null; then
+  arch-chroot /mnt systemctl enable scx >> /mnt/root/chrome-unnamed/install.log 2>&1
+  # Minor Bug #10: Guard configuration directory
+  mkdir -p /mnt/etc/default
+  echo "SCX_SCHEDULER=scx_layered" > /mnt/etc/default/scx
 fi
+
+  base_apps: "$APPS"
+EOF
+
+# 2a. SERVICE INITIALIZATION (Consolidated Major Bug #4)
+gum spin --title "Initializing background services..." -- bash -c "
+  arch-chroot /mnt systemctl enable systemd-timesyncd >> /mnt/root/chrome-unnamed/install.log 2>&1
+  arch-chroot /mnt systemctl enable reflector.timer >> /mnt/root/chrome-unnamed/install.log 2>&1
+  if [ \"$HAS_BATTERY\" == \"true\" ]; then
+    arch-chroot /mnt systemctl enable tlp >> /mnt/root/chrome-unnamed/install.log 2>&1
+  fi
+"
 
 # 2b. SERVICE INITIALIZATION
 gum spin --title "Initializing background services..." -- bash -c "
@@ -86,7 +122,12 @@ gum spin --title "Initializing background services..." -- bash -c "
 gum spin --title "Configuring user accounts..." -- bash -c '
   # Pass passwords via stdin to chpasswd to avoid exposure in process lists
   printf "root:%s\n" "$1" | arch-chroot /mnt chpasswd
-  arch-chroot /mnt useradd -m -s /usr/bin/zsh "$2"
+  
+  # FIX: Check if user exists before creation to prevent crash on retry
+  if ! arch-chroot /mnt id "$2" &>/dev/null; then
+    arch-chroot /mnt useradd -m -s /usr/bin/zsh "$2"
+  fi
+  
   printf "%s:%s\n" "$2" "$3" | arch-chroot /mnt chpasswd
 ' _ "$ROOT_PASS" "$USERNAME" "$USER_PASS"
 
@@ -113,22 +154,28 @@ gum spin --title "Downloading desktop configurations..." -- bash -c '
   rm -rf /tmp/payload_repo
 ' _ "$REPO_URL" "$USERNAME"
 
-# 6. TERMINAL INITIALIZATION
-gum spin --title "Initializing terminal interface..." -- bash -c "
-  [ ! -f /mnt/home/${USERNAME}/.zshrc ] && touch /mnt/home/${USERNAME}/.zshrc
-  
-  # Nvidia Hyprland environment variables
-  if [ \"$IS_NVIDIA\" == \"true\" ]; then
+  # Nvidia Hyprland environment variables (Restored Minor Bug #6)
+  if [ "$1" == "true" ]; then
     {
       echo 'export LIBVA_DRIVER_NAME=nvidia'
       echo 'export XDG_SESSION_TYPE=wayland'
       echo 'export GBM_BACKEND=nvidia-drm'
       echo 'export __GLX_VENDOR_LIBRARY_NAME=nvidia'
       echo 'export WLR_NO_HARDWARE_CURSORS=1'
-    } >> /mnt/home/${USERNAME}/.zshrc
+    } >> /mnt/home/$2/.zshrc
   fi
   
-  arch-chroot /mnt chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.zshrc
-"
+  # Divergence: First-Flight Onboarding Trigger (Fixed Major Bug #3 Path)
+  cat <<EOF >> /mnt/home/$2/.zshrc
+
+# Chrome-Unnamed First-Flight Trigger
+if [ ! -f ~/.chrome_unnamed_onboarded ]; then
+    chrome-onboard
+fi
+EOF
+
+  # Minor Bug #7: Outside-chroot ownership for reliability
+  chown -R $2:$2 /mnt/home/$2/
+' _ "$IS_NVIDIA" "$USERNAME" "$USER_PASS"
 
 gum style --foreground 10 " [OK] User account $USERNAME fully initialized."

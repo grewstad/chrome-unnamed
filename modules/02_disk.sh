@@ -119,6 +119,8 @@ for part in "${!MOUNTS[@]}"; do
     # Opinionated: Always use Btrfs for everything else
     gum style --foreground 15 "Enforcing Btrfs for $mnt..."
     if gum confirm "Format $part as Btrfs for $mnt? (WARNING: Irreversible data loss)"; then
+      # Fix Iteration 17: Wipe signatures before formatting to avoid mkfs failure
+      gum spin --title "Wiping signatures on $part..." -- wipefs -a "$part"
       gum spin --title "Formatting $part as Btrfs..." -- mkfs.btrfs -f "$part"
     fi
   fi
@@ -136,6 +138,7 @@ gum spin --title "Mounting filesystem structure [Optimizing Btrfs Topology]..." 
   btrfs subvolume create /mnt/@ &>/dev/null || true
   btrfs subvolume create /mnt/@cache &>/dev/null || true
   btrfs subvolume create /mnt/@log &>/dev/null || true
+  btrfs subvolume create /mnt/@snapshots &>/dev/null || true
   
   if [ "$2" != "true" ]; then
     btrfs subvolume create /mnt/@home &>/dev/null || true
@@ -151,9 +154,10 @@ gum spin --title "Mounting filesystem structure [Optimizing Btrfs Topology]..." 
   mount -o $MOUNT_OPTS,subvol=@ "$1" /mnt
   
   # Mount auxiliary subvolumes
-  mkdir -p /mnt/var/cache /mnt/var/log
+  mkdir -p /mnt/var/cache /mnt/var/log /mnt/.snapshots
   mount -o $MOUNT_OPTS,subvol=@cache "$1" /mnt/var/cache
   mount -o $MOUNT_OPTS,subvol=@log "$1" /mnt/var/log
+  mount -o $MOUNT_OPTS,subvol=@snapshots "$1" /mnt/.snapshots
   
   if [ "$2" != "true" ]; then
     mkdir -p /mnt/home

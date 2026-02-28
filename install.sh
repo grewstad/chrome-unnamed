@@ -32,11 +32,11 @@ echo "[INIT] Chrome-Unnamed Installation Suite Started at $(date)" > "$LOG_FILE"
 profile_hardware
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="16"
+BUILD_ITERATION="17"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
-  "CHROME-UNNAMED PRODUCTION ISO (2026-02-28) - V$BUILD_ITERATION [STABLE-INNOVATION]"
+  "CHROME-UNNAMED PRODUCTION ISO (2026-02-28) - V$BUILD_ITERATION [HARDENED]"
 
 # 1. DEPENDENCY INJECTION
 # Major Bug #1: AUR/Live Isolation. Avoid pacman crash if scx-scheds is not in repos.
@@ -82,7 +82,7 @@ source "modules/01_network.sh"
 if gum confirm "Optimize repository mirrors with Reflector? (Recommended)"; then
     if nm-online -t 15 >/dev/null; then
         gum spin --title "Optimizing mirrors for maximum throughput..." -- \
-            bash -c "reflector --latest 10 --protocol https --sort rate --save /etc/pacman.d/mirrorlist >> \"$LOG_FILE\" 2>&1"
+            bash -c "reflector --latest 10 --protocol https --sort rate --connection-timeout 60 --save /etc/pacman.d/mirrorlist >> \"$LOG_FILE\" 2>&1 || true"
     else
         gum style --foreground 15 "Warning: Network offline. Skipping mirror optimization."
     fi

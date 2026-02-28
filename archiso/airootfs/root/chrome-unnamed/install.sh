@@ -32,17 +32,23 @@ echo "[INIT] Chrome-Unnamed Installation Suite Started at $(date)" > "$LOG_FILE"
 profile_hardware
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="12"
+BUILD_ITERATION="16"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
-  "CHROME-UNNAMED PRODUCTION ISO (2026-02-28) - V$BUILD_ITERATION [QOL+]"
+  "CHROME-UNNAMED PRODUCTION ISO (2026-02-28) - V$BUILD_ITERATION [STABLE-INNOVATION]"
 
 # 1. DEPENDENCY INJECTION
-# Ensure the TUI rendering engine (gum) is present in the live environment.
+# Major Bug #1: AUR/Live Isolation. Avoid pacman crash if scx-scheds is not in repos.
 if ! command -v gum &>/dev/null; then
   echo "[INIT] Resolving UI dependencies (gum)..."
   pacman -Sy gum --noconfirm --needed &>/dev/null
+fi
+
+# Modular check for scx
+if ! command -v scx_layered &>/dev/null; then
+  echo "[INIT] Probing for optional performance modules..."
+  pacman -Sy scx-scheds --noconfirm --needed &>/dev/null || true
 fi
 
 # 1b. CORE UTILITY AUDIT
@@ -124,10 +130,10 @@ echo ""
 echo " [TOPOLOGY SUMMARY]"
 lsblk -pno NAME,SIZE,FSTYPE,MOUNTPOINT | grep "/mnt" | sed 's|/mnt||g'
 echo ""
-echo " [OMAKASE PAYLOAD]"
-echo "  - Hyprland TWM, Ghostty, Firefox, Fastfetch"
-echo "  - AUR Bridge: yay (deps included)"
-echo "  - Shell: Zsh (Syntax+Autosuggestions active)"
+echo " [RECOVERY & ONBOARDING]"
+echo "  - Rescue-Core: Built-in safety boot entry enabled"
+echo "  - Blueprint:   /etc/chrome-unnamed/blueprint.yaml generated"
+echo "  - First-Flight: Wizad queued for first login"
 echo ""
 gum style --foreground 8 " [TIP] Run 'fastfetch' on your first login to verify visual fidelity."
 echo ""
