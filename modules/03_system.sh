@@ -11,7 +11,7 @@ source "modules/00_helpers.sh"
 # 1. BASE SYSTEM DEPLOYMENT (PACSTRAP)
 gum spin --title "Injecting Arch Linux Zen Core... [Optimizing for low-latency workloads]" -- \
   pacstrap -K /mnt base linux-zen linux-firmware intel-ucode amd-ucode \
-    btrfs-progs limine networkmanager nvim sudo efibootmgr --noconfirm
+    btrfs-progs limine networkmanager nvim sudo efibootmgr zram-generator --noconfirm
 
 gum style --foreground 10 " [OK] Base system components successfully injected."
 
@@ -38,9 +38,20 @@ gum spin --title "Configuring locale and timezone..." -- bash -c '
   ln -sf /usr/share/zoneinfo/UTC /mnt/etc/localtime
   arch-chroot /mnt hwclock --systohc
   arch-chroot /mnt locale-gen &>/dev/null
+
+  # Add Btrfs hook to mkinitcpio for faster/reliable boot
+  sed -i "s/^HOOKS=(base udev/HOOKS=(base udev btrfs/" /mnt/etc/mkinitcpio.conf
+
   # Mkinitcpio: Ensure Btrfs hooks are active for the zen kernel
   arch-chroot /mnt mkinitcpio -P &>/dev/null
   arch-chroot /mnt systemctl enable NetworkManager &>/dev/null
+
+  # ZRAM Strategy (50% of RAM, zstd compression)
+  cat <<EOF > /mnt/etc/systemd/zram-generator.conf
+[zram0]
+zram-size = ram / 2
+compression-algorithm = zstd
+EOF
 ' _ "$HOSTNAME" "$KEYMAP"
 
 gum style --foreground 10 " [OK] Chronometrics and localization identity established."

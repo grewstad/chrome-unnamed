@@ -127,12 +127,15 @@ udevadm settle
 
 # 4. FILESYSTEM MOUNTING
 # Mount root first, then create and mount Btrfs subvolumes.
-gum spin --title "Mounting filesystem structure..." -- bash -c '
+gum spin --title "Mounting filesystem structure [Optimizing Btrfs Topology]..." -- bash -c '
   set -e
   mount "$1" /mnt
 
-  # Force Btrfs subvolume layout
+  # Advanced Subvolume Layout (EndeavourOS inspired)
   btrfs subvolume create /mnt/@ &>/dev/null || true
+  btrfs subvolume create /mnt/@cache &>/dev/null || true
+  btrfs subvolume create /mnt/@log &>/dev/null || true
+  
   if [ "$2" != "true" ]; then
     btrfs subvolume create /mnt/@home &>/dev/null || true
   fi
@@ -140,12 +143,20 @@ gum spin --title "Mounting filesystem structure..." -- bash -c '
   umount /mnt
   udevadm settle
   
+  # Standardized Pro-Spec Mount Options
+  MOUNT_OPTS="noatime,compress=zstd:3,autodefrag,discard=async"
+  
   # Re-mount with @ subvolume
-  mount -o compress=zstd:3,noatime,autodefrag,subvol=@ "$1" /mnt
+  mount -o $MOUNT_OPTS,subvol=@ "$1" /mnt
+  
+  # Mount auxiliary subvolumes
+  mkdir -p /mnt/var/cache /mnt/var/log
+  mount -o $MOUNT_OPTS,subvol=@cache "$1" /mnt/var/cache
+  mount -o $MOUNT_OPTS,subvol=@log "$1" /mnt/var/log
   
   if [ "$2" != "true" ]; then
     mkdir -p /mnt/home
-    mount -o compress=zstd:3,noatime,autodefrag,subvol=@home "$1" /mnt/home
+    mount -o $MOUNT_OPTS,subvol=@home "$1" /mnt/home
   fi
 ' _ "$PART_ROOT" "$HAS_MANUAL_HOME"
 
