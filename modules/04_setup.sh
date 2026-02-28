@@ -29,17 +29,21 @@ while true; do
   if [ "$USER_PASS" == "$USER_PASS_CONFIRM" ] && [ -n "$USER_PASS" ]; then
     break
   else
-    gum style --foreground 15 "Passwords do not match or are empty. Please retry."
+    gum style --foreground 9 " [!] Passwords do not match or are empty. Please retry."
   fi
 done
+
+gum style --foreground 10 " [OK] Operator credentials validated."
 
 SUDO_ACCESS=$(gum confirm "Grant $USERNAME administrative (sudo) privileges?" && echo "yes" || echo "no")
 
 # 2. APPLICATION PAYLOAD
-APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber reflector"
+APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber reflector zsh-autosuggestions zsh-syntax-highlighting"
 
-gum spin --title "Installing software packages..." -- \
+gum spin --title "Ingesting production-grade packages... [Developer-Focused Omakase]" -- \
   pacstrap -K /mnt "$APPS" --noconfirm
+
+gum style --foreground 10 " [OK] Software payload deployed."
 
 # 2b. SERVICE INITIALIZATION
 gum spin --title "Initializing background services..." -- bash -c "
@@ -54,6 +58,8 @@ gum spin --title "Configuring user accounts..." -- bash -c '
   arch-chroot /mnt useradd -m -s /usr/bin/zsh "$2"
   printf "%s:%s\n" "$2" "$3" | arch-chroot /mnt chpasswd
 ' _ "$ROOT_PASS" "$USERNAME" "$USER_PASS"
+
+gum style --foreground 10 " [OK] Operator accounts configured and secured."
 
 # 4. PRIVILEGE ESCALATION
 if [ "$SUDO_ACCESS" == "yes" ]; then
@@ -82,4 +88,4 @@ gum spin --title "Initializing terminal interface..." -- bash -c "
   arch-chroot /mnt chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.zshrc
 "
 
-gum style --foreground 15 "[SYS] User account $USERNAME successfully initialized."
+gum style --foreground 10 " [OK] User account $USERNAME fully initialized."

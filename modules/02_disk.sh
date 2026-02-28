@@ -55,16 +55,15 @@ select_partition() {
     return 1
   fi
 
-  local selected_raw
   stty sane
   selected_raw=$(echo "$choices" | gum choose --header "$prompt")
   local selected
-  # Leverage global helper to ensure 100% path accuracy
   selected=$(clean_path "$selected_raw")
 
   if [ -n "$selected" ]; then
     USED_PARTS+=("$selected")
     echo "$selected"
+    gum style --foreground 10 " [OK] Vector assigned: $selected"
   fi
 }
 
@@ -75,7 +74,7 @@ MOUNTS["$PART_ROOT"]="/"
 
 PART_EFI=$(select_partition "Select EFI partition (FAT32)")
 if [ -z "$PART_EFI" ]; then
-  gum style --foreground 15 "[DISK] FATAL: EFI partition missing. System will not boot."
+  gum style --foreground 9 " [FATAL] EFI partition missing. Boot impossible."
   return 1
 fi
 MOUNTS["$PART_EFI"]="/efi"
@@ -157,10 +156,10 @@ for part in "${!MOUNTS[@]}"; do
     continue 
   fi
 
-  gum spin --title "Mounting $part -> $mnt..." -- bash -c '
-    mkdir -p /mnt"$2"
-    mount "$1" /mnt"$2"
-  ' _ "$part" "$mnt"
+  gum spin --title "Mounting $part -> $mnt..." -- bash -c "
+    mkdir -p /mnt$2
+    mount $1 /mnt$2
+  " _ "$part" "$mnt"
 done
 
 # Enable swap
@@ -168,4 +167,4 @@ if [ "$ENABLE_SWAP" == "true" ]; then
   gum spin --title "Enabling swap on $SWAP_PART..." -- swapon "$SWAP_PART"
 fi
 
-gum style --foreground 15 "[DISK] Filesystem structure established and mounted."
+gum style --foreground 10 " [OK] Filesystem topology mounted and verified."

@@ -9,9 +9,11 @@ set -e
 source "modules/00_helpers.sh"
 
 # 1. BASE SYSTEM DEPLOYMENT (PACSTRAP)
-gum spin --title "Deploying base operating system components..." -- \
+gum spin --title "Injecting Arch Linux Zen Core... [Optimizing for low-latency workloads]" -- \
   pacstrap -K /mnt base linux-zen linux-firmware intel-ucode amd-ucode \
     btrfs-progs limine networkmanager nvim sudo efibootmgr --noconfirm
+
+gum style --foreground 10 " [OK] Base system components successfully injected."
 
 # 2. FILESYSTEM MAPPING (FSTAB)
 gum spin --title "Mapping filesystem structure (fstab)..." -- bash -c "genfstab -U /mnt >> /mnt/etc/fstab"
@@ -40,6 +42,8 @@ gum spin --title "Configuring locale and timezone..." -- bash -c '
   arch-chroot /mnt mkinitcpio -P &>/dev/null
   arch-chroot /mnt systemctl enable NetworkManager &>/dev/null
 ' _ "$HOSTNAME" "$KEYMAP"
+
+gum style --foreground 10 " [OK] Chronometrics and localization identity established."
 
 # 4. BOOTLOADER SETUP (LIMINE)
 # Determine which disk the EFI partition is on (needed for efibootmgr)
@@ -105,4 +109,4 @@ gum spin --title "Registering UEFI boot entry in NVRAM..." -- \
     --label 'Chrome-Unnamed (Limine)' \
     --unicode > /dev/null
 
-gum style --foreground 15 "[SYS] Limine bootloader installed. System is autonomous."
+gum style --foreground 10 " [OK] Limine bootloader installed. System is now autonomous."

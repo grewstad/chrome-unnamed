@@ -8,8 +8,21 @@
 # ==============================================================================
 
 set -e
-trap 'stty sane; gum style --foreground 15 "FATAL: Deployment failed in $(basename "$0") at line $LINENO. Check $LOG_FILE for details." ; exit 1' ERR
-trap 'stty sane; echo -e "\n[EXIT] User interrupted. Shutting down."; exit 1' SIGINT
+trap 'stty sane; gum style --foreground 15 " [FATAL] Deployment failed in $(basename "$0") at line $LINENO. Check $LOG_FILE for details." ; exit 1' ERR
+trap 'stty sane; echo -e "\n [EXIT] User interrupted. Returning to terminal control."; exit 1' SIGINT
+
+# --- AESTHETIC IDENTITY ---
+clear
+gum style --foreground 15 "
+  ██████╗██╗  ██╗██████╗  ██████╗ ███╗   ███╗███████╗
+ ██╔════╝██║  ██║██╔══██╗██╔═══██╗████╗ ████║██╔════╝
+ ██║     ███████║██████╔╝██║   ██║██╔████╔██║█████╗  
+ ██║     ██╔══██║██╔══██╗██║   ██║██║╚██╔╝██║██╔══╝  
+ ╚██████╗██║  ██║██║  ██║╚██████╔╝██║ ╚═╝ ██║███████╗.UNNAMED
+  ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝
+"
+gum style --foreground 8 "        [ ARCH LINUX OPTIMIZED INSTALLATION SUITE ]"
+echo ""
 
 # --- GLOBAL TELEMETRY & HELPERS ---
 source "modules/00_helpers.sh"
@@ -19,11 +32,11 @@ echo "[INIT] Chrome-Unnamed Installation Suite Started at $(date)" > "$LOG_FILE"
 profile_hardware
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="9"
+BUILD_ITERATION="10"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
-  "CHROME-UNNAMED HARDENED ISO (2026-02-28) - V$BUILD_ITERATION [STABLE]"
+  "CHROME-UNNAMED PRODUCTION ISO (2026-02-28) - V$BUILD_ITERATION [STABLE]"
 
 # 1. DEPENDENCY INJECTION
 # Ensure the TUI rendering engine (gum) is present in the live environment.
@@ -97,19 +110,33 @@ for module in "${modules[@]}"; do
   fi
 done
 
-# 6. TELEMETRY PERSISTENCE & FINALIZE
-echo "[CORE] Persisting installation logs to the local device..."
-# /mnt is active if module 02/03 succeeded
-if mountpoint -q /mnt; then
-    mkdir -p /mnt/var/log/
-    cp "$LOG_FILE" /mnt/var/log/chrome-unnamed-install.log 2>/dev/null || true
-    # Also copy to the user's home for immediate visibility
-    if [ -d "/mnt/home/$USERNAME" ]; then
-        cp "$LOG_FILE" "/mnt/home/$USERNAME/install.log" 2>/dev/null || true
-        # Make sure user owns it
-        chroot /mnt chown "$USERNAME":"$USERNAME" "/home/$USERNAME/install.log" 2>/dev/null || true
-    fi
+# 6. STRATEGIC SUMMARY & FINALIZE
+clear
+gum style --border normal --padding "1 4" --border-foreground 10 --foreground 10 --bold \
+  "INSTALLATION COMPLETE: CHROME-UNNAMED IS VITAL"
+
+echo ""
+echo " [SYSTEM IDENTITY]"
+echo "  - Hostname: $HOSTNAME"
+echo "  - User:     $USERNAME (@/usr/bin/zsh)"
+echo "  - Kernel:   Arch Linux Zen (lts-optimized)"
+echo ""
+echo " [TOPOLOGY SUMMARY]"
+lsblk -pno NAME,SIZE,FSTYPE,MOUNTPOINT | grep "/mnt" | sed 's|/mnt||g'
+echo ""
+echo " [OMAKASE PAYLOAD]"
+echo "  - Hyprland TWM, Ghostty, Firefox, Fastfetch"
+echo "  - AUR Bridge: yay (deps included)"
+echo "  - Shell: Zsh (Syntax+Autosuggestions active)"
+echo ""
+gum style --foreground 8 " [TIP] Run 'fastfetch' on your first login to verify visual fidelity."
+echo ""
+
+cp "$LOG_FILE" /mnt/var/log/chrome-unnamed-install.log 2>/dev/null || true
+if [ -d "/mnt/home/$USERNAME" ]; then
+    cp "$LOG_FILE" "/mnt/home/$USERNAME/install.log" 2>/dev/null || true
+    chroot /mnt chown "$USERNAME":"$USERNAME" "/home/$USERNAME/install.log" 2>/dev/null || true
 fi
 
 stty sane
-gum confirm "Deployment successful. System is primed. Reboot now?" && reboot
+gum confirm "System is primed for autonomous operation. Reboot now?" && reboot
