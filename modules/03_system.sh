@@ -10,10 +10,11 @@ source "modules/00_helpers.sh"
 
 # 1. BASE SYSTEM DEPLOYMENT (PACSTRAP)
 # Omarchy Pattern: Injecting 'kernel-modules-hook' to prevent breakage after kernel updates
+# Divergence: Adding 'snapper' for deep snapshot integration
 gum spin --title "Injecting Arch Linux Zen Core... [Optimizing for low-latency workloads]" -- \
   pacstrap -K /mnt base linux-zen linux-firmware intel-ucode amd-ucode \
     btrfs-progs limine networkmanager nvim sudo efibootmgr zram-generator \
-    bash-completion zsh-completions kernel-modules-hook --noconfirm
+    bash-completion zsh-completions kernel-modules-hook snapper --noconfirm
 
 gum style --foreground 10 " [OK] Base system components successfully injected."
 
@@ -76,6 +77,16 @@ EOF
 
   # Enable the Kernel Module Hook for reliability
   arch-chroot /mnt systemctl enable linux-modules-cleanup.service >> /mnt/root/chrome-unnamed/install.log 2>&1
+
+  # Snapper Integration (openSUSE Style Divergence)
+  # FIX: Idempotent snapper config
+  if [ ! -f /mnt/etc/snapper/configs/root ]; then
+    arch-chroot /mnt snapper -c root create-config / >> /mnt/root/chrome-unnamed/install.log 2>&1
+    # Optimization: Only keep last 5 hourly/daily snapshots for space
+    sed -i 's/TIMELINE_LIMIT_HOURLY=".*"/TIMELINE_LIMIT_HOURLY="5"/' /mnt/etc/snapper/configs/root
+    sed -i 's/TIMELINE_LIMIT_DAILY=".*"/TIMELINE_LIMIT_DAILY="5"/' /mnt/etc/snapper/configs/root
+    arch-chroot /mnt systemctl enable snapper-timeline.timer >> /mnt/root/chrome-unnamed/install.log 2>&1
+  fi
 ' _ "$HOSTNAME" "$KEYMAP"
 
 gum style --foreground 10 " [OK] Chronometrics and localization identity established."

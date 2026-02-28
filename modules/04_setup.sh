@@ -81,10 +81,41 @@ else
   HAS_BATTERY=false
 fi
 
+# 5. SOFTWARE PAYLOAD & GAMING OPTIMIZATION (Omarchy++ Divergence)
+# Divergence: Intelligent Gaming Schedulers (scx-scheds)
+# We detect the CPU and install extensible schedulers for better-than-Zen performance.
+if grep -qiE "intel|amd" /proc/cpuinfo; then
+  APPS="$APPS scx-scheds"
+  gum style --foreground 14 " [⚡] CPU-Extensible Schedulers (scx) added to payload."
+fi
+
 gum spin --title "Ingesting production-grade packages... [Developer-Focused Omakase]" -- \
   pacstrap -K /mnt "$APPS" --noconfirm
 
-gum style --foreground 10 " [OK] Software payload deployed."
+# Enable scx_layered (multi-core optimized) by default if supported
+if arch-chroot /mnt which scx_layered &>/dev/null; then
+  arch-chroot /mnt systemctl enable scx >> /mnt/root/chrome-unnamed/install.log 2>&1
+  # Configure scx to use layered by default
+  echo "SCX_SCHEDULER=scx_layered" > /mnt/etc/default/scx
+fi
+
+# 6. DECLARATIVE BLUEPRINT (NixOS Style)
+# Divergence: Recording system state for reproducibility
+mkdir -p /mnt/etc/chrome-unnamed
+cat <<EOF > /mnt/etc/chrome-unnamed/blueprint.yaml
+# CHROME-UNNAMED SYSTEM BLUEPRINT
+# Generated: $(date)
+# Version: V$BUILD_ITERATION
+meta:
+  hostname: "$HOSTNAME"
+  username: "$USERNAME"
+hardware:
+  nvidia: $IS_NVIDIA
+  battery: $HAS_BATTERY
+  cpu: "$(uname -m)"
+payload:
+  base_apps: "$APPS"
+EOF
 
 # 2a. LAPTOP OPTIMIZATIONS
 if [ "$HAS_BATTERY" == "true" ]; then
