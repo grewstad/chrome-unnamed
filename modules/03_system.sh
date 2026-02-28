@@ -16,6 +16,11 @@ gum spin --title "Injecting Arch Linux Zen Core... [Optimizing for low-latency w
     btrfs-progs limine networkmanager nvim sudo efibootmgr zram-generator \
     bash-completion zsh-completions kernel-modules-hook snapper --noconfirm
 
+# FIX: Move onboarding script to a globally accessible path (Major Bug #3)
+mkdir -p /mnt/usr/local/bin
+cp modules/06_onboarding.sh /mnt/usr/local/bin/chrome-onboard
+chmod +x /mnt/usr/local/bin/chrome-onboard
+
 gum style --foreground 10 " [OK] Base system components successfully injected."
 
 # 2. FILESYSTEM MAPPING (FSTAB)
@@ -48,7 +53,9 @@ gum spin --title "Configuring locale and timezone..." -- bash -c '
   arch-chroot /mnt hwclock --systohc
   arch-chroot /mnt locale-gen &>/dev/null
 
-  # Add Btrfs hook to mkinitcpio for faster/reliable boot
+  # Add Btrfs + Nvidia hooks to mkinitcpio for faster/reliable boot
+  # Major Bug #2: Nvidia KMS is required for Wayland/Hyprland stability
+  sed -i "s/^MODULES=(/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm /" /mnt/etc/mkinitcpio.conf
   sed -i "s/^HOOKS=(base udev/HOOKS=(base udev btrfs/" /mnt/etc/mkinitcpio.conf
 
   # Mkinitcpio: Ensure Btrfs hooks are active for the zen kernel
@@ -79,6 +86,11 @@ EOF
   arch-chroot /mnt systemctl enable linux-modules-cleanup.service >> /mnt/root/chrome-unnamed/install.log 2>&1
 
   # Snapper Integration (openSUSE Style Divergence)
+  # Minor Bug #5: Need to create .snapshots subvolume explicitly
+  if [ ! -d /mnt/.snapshots ]; then
+    btrfs subvolume create /mnt/.snapshots
+  fi
+  
   # FIX: Idempotent snapper config
   if [ ! -f /mnt/etc/snapper/configs/root ]; then
     arch-chroot /mnt snapper -c root create-config / >> /mnt/root/chrome-unnamed/install.log 2>&1
@@ -149,7 +161,7 @@ TIMEOUT=5
     KERNEL_PATH=uuid(${1}):${2}
     ${3}
     MODULE_PATH=uuid(${1}):${4}
-    # Single-user mode for built-in recovery
+    # Minor Bug #4: Remove 'quiet' from rescue mode for transparency
     CMDLINE=root=UUID=${5} rw rootflags=subvol=@ single
 EOF
 ' _ "$KERNEL_UUID" "$K_PATH" "$UCODE" "$I_PATH" "$ROOT_UUID"

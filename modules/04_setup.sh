@@ -95,32 +95,21 @@ gum spin --title "Ingesting production-grade packages... [Developer-Focused Omak
 # Enable scx_layered (multi-core optimized) by default if supported
 if arch-chroot /mnt which scx_layered &>/dev/null; then
   arch-chroot /mnt systemctl enable scx >> /mnt/root/chrome-unnamed/install.log 2>&1
-  # Configure scx to use layered by default
+  # Minor Bug #10: Guard configuration directory
+  mkdir -p /mnt/etc/default
   echo "SCX_SCHEDULER=scx_layered" > /mnt/etc/default/scx
 fi
 
-# 6. DECLARATIVE BLUEPRINT (NixOS Style)
-# Divergence: Recording system state for reproducibility
-mkdir -p /mnt/etc/chrome-unnamed
-cat <<EOF > /mnt/etc/chrome-unnamed/blueprint.yaml
-# CHROME-UNNAMED SYSTEM BLUEPRINT
-# Generated: $(date)
-# Version: V$BUILD_ITERATION
-meta:
-  hostname: "$HOSTNAME"
-  username: "$USERNAME"
-hardware:
-  nvidia: $IS_NVIDIA
-  battery: $HAS_BATTERY
-  cpu: "$(uname -m)"
-payload:
   base_apps: "$APPS"
 EOF
 
-# 2b. SERVICE INITIALIZATION
+# 2a. SERVICE INITIALIZATION (Consolidated Major Bug #4)
 gum spin --title "Initializing background services..." -- bash -c "
   arch-chroot /mnt systemctl enable systemd-timesyncd >> /mnt/root/chrome-unnamed/install.log 2>&1
   arch-chroot /mnt systemctl enable reflector.timer >> /mnt/root/chrome-unnamed/install.log 2>&1
+  if [ \"$HAS_BATTERY\" == \"true\" ]; then
+    arch-chroot /mnt systemctl enable tlp >> /mnt/root/chrome-unnamed/install.log 2>&1
+  fi
 "
 
 # 2b. SERVICE INITIALIZATION
@@ -165,31 +154,28 @@ gum spin --title "Downloading desktop configurations..." -- bash -c '
   rm -rf /tmp/payload_repo
 ' _ "$REPO_URL" "$USERNAME"
 
-# 6. TERMINAL INITIALIZATION
-gum spin --title "Initializing terminal interface..." -- bash -c "
-  [ ! -f /mnt/home/${USERNAME}/.zshrc ] && touch /mnt/home/${USERNAME}/.zshrc
-  
-  # Nvidia Hyprland environment variables
-  if [ \"$IS_NVIDIA\" == \"true\" ]; then
+  # Nvidia Hyprland environment variables (Restored Minor Bug #6)
+  if [ "$1" == "true" ]; then
     {
       echo 'export LIBVA_DRIVER_NAME=nvidia'
       echo 'export XDG_SESSION_TYPE=wayland'
       echo 'export GBM_BACKEND=nvidia-drm'
       echo 'export __GLX_VENDOR_LIBRARY_NAME=nvidia'
       echo 'export WLR_NO_HARDWARE_CURSORS=1'
-    } >> /mnt/home/${USERNAME}/.zshrc
+    } >> /mnt/home/$2/.zshrc
   fi
   
-  # Divergence: First-Flight Onboarding Trigger
-  cat <<EOF >> /mnt/home/${USERNAME}/.zshrc
+  # Divergence: First-Flight Onboarding Trigger (Fixed Major Bug #3 Path)
+  cat <<EOF >> /mnt/home/$2/.zshrc
 
 # Chrome-Unnamed First-Flight Trigger
 if [ ! -f ~/.chrome_unnamed_onboarded ]; then
-    /root/chrome-unnamed/modules/06_onboarding.sh
+    chrome-onboard
 fi
 EOF
 
-  arch-chroot /mnt chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.zshrc
-"
+  # Minor Bug #7: Outside-chroot ownership for reliability
+  chown -R $2:$2 /mnt/home/$2/
+' _ "$IS_NVIDIA" "$USERNAME" "$USER_PASS"
 
 gum style --foreground 10 " [OK] User account $USERNAME fully initialized."

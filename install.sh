@@ -36,14 +36,19 @@ BUILD_ITERATION="16"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
-  "CHROME-UNNAMED PRODUCTION ISO (2026-02-28) - V$BUILD_ITERATION [INNOVATION]"
+  "CHROME-UNNAMED PRODUCTION ISO (2026-02-28) - V$BUILD_ITERATION [STABLE-INNOVATION]"
 
 # 1. DEPENDENCY INJECTION
-# Ensure the TUI rendering engine (gum) and Innovative Schedulers are present.
+# Major Bug #1: AUR/Live Isolation. Avoid pacman crash if scx-scheds is not in repos.
 if ! command -v gum &>/dev/null; then
-  echo "[INIT] Resolving UI & Gaming dependencies (gum, scx-scheds)..."
-  pacstrap -K /mnt gum scx-scheds &>/dev/null
-  pacman -Sy gum scx-scheds --noconfirm --needed &>/dev/null
+  echo "[INIT] Resolving UI dependencies (gum)..."
+  pacman -Sy gum --noconfirm --needed &>/dev/null
+fi
+
+# Modular check for scx
+if ! command -v scx_layered &>/dev/null; then
+  echo "[INIT] Probing for optional performance modules..."
+  pacman -Sy scx-scheds --noconfirm --needed &>/dev/null || true
 fi
 
 # 1b. CORE UTILITY AUDIT
