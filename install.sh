@@ -19,7 +19,7 @@ echo "[INIT] Chrome-Unnamed Installation Suite Started at $(date)" > "$LOG_FILE"
 profile_hardware
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="8"
+BUILD_ITERATION="9"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
