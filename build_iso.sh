@@ -12,10 +12,30 @@ fi
 
 # 2. BUILD
 echo "Starting ISO build process..."
-echo "PRE-FLIGHT: Syncing latest scripts to ISO root (sudo required)..."
-mkdir -p archiso/airootfs/root/chrome-unnamed/modules/
-cp -f install.sh archiso/airootfs/root/chrome-unnamed/
-cp -f modules/*.sh archiso/airootfs/root/chrome-unnamed/modules/
+
+# Define targets
+TARGET_DIR="archiso/airootfs/root/chrome-unnamed"
+mkdir -p "$TARGET_DIR/modules"
+
+echo "PRE-FLIGHT: Forcefully syncing latest scripts to ISO (sudo used)..."
+# Wipe target first to ensure no stale files persist
+sudo rm -rf "$TARGET_DIR"
+mkdir -p "$TARGET_DIR/modules"
+
+# Copy fresh
+cp -f install.sh "$TARGET_DIR/"
+cp -f modules/*.sh "$TARGET_DIR/modules/"
+
+# --- FRESHNESS GUARANTEE ---
+# Verify that the iteration number in the ISO source matches the local source
+LOCAL_VER=$(grep "BUILD_ITERATION=" install.sh | cut -d'"' -f2)
+ISO_VER=$(grep "BUILD_ITERATION=" "$TARGET_DIR/install.sh" | cut -d'"' -f2)
+
+if [ "$LOCAL_VER" != "$ISO_VER" ]; then
+    echo "ERROR: Synchronization failed! Local version ($LOCAL_VER) != ISO version ($ISO_VER)"
+    exit 1
+fi
+echo "SYNC VERIFIED: Building Iteration $ISO_VER"
 
 echo "PRE-FLIGHT: Ensuring clean workspace..."
 sudo rm -rf out/ work/

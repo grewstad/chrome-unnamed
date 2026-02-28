@@ -4,7 +4,7 @@ set -e
 trap 'gum style --foreground 15 "CRITICAL ERROR: Installer crashed or a command failed. Aborting." ; exit 1' ERR
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="1"
+BUILD_ITERATION="2"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
