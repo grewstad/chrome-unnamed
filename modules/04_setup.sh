@@ -40,10 +40,25 @@ SUDO_ACCESS=$(gum confirm "Grant $USERNAME administrative (sudo) privileges?" &&
 # 2. APPLICATION PAYLOAD
 APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber reflector zsh-autosuggestions zsh-syntax-highlighting"
 
+# Laptop Detection: Add TLP if battery exists
+if [ -d /sys/class/power_supply ] && ls /sys/class/power_supply/BAT* &>/dev/null; then
+  APPS="$APPS tlp"
+  HAS_BATTERY=true
+else
+  HAS_BATTERY=false
+fi
+
 gum spin --title "Ingesting production-grade packages... [Developer-Focused Omakase]" -- \
   pacstrap -K /mnt "$APPS" --noconfirm
 
 gum style --foreground 10 " [OK] Software payload deployed."
+
+# 2a. LAPTOP OPTIMIZATIONS
+if [ "$HAS_BATTERY" == "true" ]; then
+  gum spin --title "Optimizing for mobile hardware (TLP)..." -- \
+    arch-chroot /mnt systemctl enable tlp &>/dev/null
+  gum style --foreground 10 " [OK] Laptop power management profile active."
+fi
 
 # 2b. SERVICE INITIALIZATION
 gum spin --title "Initializing background services..." -- bash -c "

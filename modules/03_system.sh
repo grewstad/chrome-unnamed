@@ -35,6 +35,11 @@ gum spin --title "Configuring locale and timezone..." -- bash -c '
   echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
   echo "KEYMAP=$2" > /mnt/etc/vconsole.conf
 
+  # 3. MAINTENANCE & IDENTITY
+  # Enable Pacman Color and Parallel Downloads for a premium QOL experience
+  sed -i 's/^#ParallelDownloads = 5/ParallelDownloads = 5/' /mnt/etc/pacman.conf
+  sed -i 's/^#Color/Color/' /mnt/etc/pacman.conf
+
   ln -sf /usr/share/zoneinfo/UTC /mnt/etc/localtime
   arch-chroot /mnt hwclock --systohc
   arch-chroot /mnt locale-gen &>/dev/null

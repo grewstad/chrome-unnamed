@@ -24,7 +24,8 @@ fi
 
 # 2. DEVICE DISCOVERY
 # We use a spinner here because disk probing can occasionally hang or take time
-gum spin --title "Probing hardware for partitions..." -- bash -c 'lsblk -plno NAME,SIZE,TYPE,FSTYPE,LABEL | grep "part" > /tmp/part_list'
+# Using -pf for a detailed human-readable view (FSTYPE, LABEL, UUID)
+gum spin --title "Probing hardware for partitions [Visual Mapping]..." -- bash -c 'lsblk -pfplno NAME,SIZE,TYPE,FSTYPE,LABEL,UUID | grep "part" > /tmp/part_list'
 PART_LIST=$(cat /tmp/part_list)
 
 if [ -z "$PART_LIST" ]; then
