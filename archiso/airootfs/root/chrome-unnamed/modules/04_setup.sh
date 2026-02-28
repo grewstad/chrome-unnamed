@@ -40,6 +40,22 @@ SUDO_ACCESS=$(gum confirm "Grant $USERNAME administrative (sudo) privileges?" &&
 # 2. APPLICATION PAYLOAD
 APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber reflector zsh-autosuggestions zsh-syntax-highlighting"
 
+# Nvidia Driver Support
+if lspci | grep -qi "nvidia"; then
+  gum style --foreground 13 " [!] Nvidia GPU detected."
+  NV_CHOICE=$(gum choose "Nvidia Proprietary (Recommended for Hyprland)" "Nouveau (Open Source)" "Skip")
+  case "$NV_CHOICE" in
+    "Nvidia Proprietary"*)
+      APPS="$APPS nvidia-dkms nvidia-utils libva-nvidia-driver"
+      IS_NVIDIA=true
+      ;;
+    "Nouveau"*)
+      APPS="$APPS xf86-video-nouveau"
+      IS_NVIDIA=false
+      ;;
+  esac
+fi
+
 # Laptop Detection: Add TLP if battery exists
 if [ -d /sys/class/power_supply ] && ls /sys/class/power_supply/BAT* &>/dev/null; then
   APPS="$APPS tlp"
@@ -100,6 +116,18 @@ gum spin --title "Downloading desktop configurations..." -- bash -c '
 # 6. TERMINAL INITIALIZATION
 gum spin --title "Initializing terminal interface..." -- bash -c "
   [ ! -f /mnt/home/${USERNAME}/.zshrc ] && touch /mnt/home/${USERNAME}/.zshrc
+  
+  # Nvidia Hyprland environment variables
+  if [ \"$IS_NVIDIA\" == \"true\" ]; then
+    {
+      echo 'export LIBVA_DRIVER_NAME=nvidia'
+      echo 'export XDG_SESSION_TYPE=wayland'
+      echo 'export GBM_BACKEND=nvidia-drm'
+      echo 'export __GLX_VENDOR_LIBRARY_NAME=nvidia'
+      echo 'export WLR_NO_HARDWARE_CURSORS=1'
+    } >> /mnt/home/${USERNAME}/.zshrc
+  fi
+  
   arch-chroot /mnt chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.zshrc
 "
 

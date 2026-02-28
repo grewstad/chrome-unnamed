@@ -32,11 +32,11 @@ echo "[INIT] Chrome-Unnamed Installation Suite Started at $(date)" > "$LOG_FILE"
 profile_hardware
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="12"
+BUILD_ITERATION="13"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
-  "CHROME-UNNAMED PRODUCTION ISO (2026-02-28) - V$BUILD_ITERATION [QOL+]"
+  "CHROME-UNNAMED PRODUCTION ISO (2026-02-28) - V$BUILD_ITERATION [STABILITY]"
 
 # 1. DEPENDENCY INJECTION
 # Ensure the TUI rendering engine (gum) is present in the live environment.

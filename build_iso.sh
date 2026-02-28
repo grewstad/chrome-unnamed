@@ -13,6 +13,10 @@ fi
 # 2. BUILD
 echo "Starting ISO build process..."
 
+# Increment to V13 for stability build
+LOCAL_VER="13"
+sed -i "s/BUILD_ITERATION=\".*\"/BUILD_ITERATION=\"$LOCAL_VER\"/" install.sh
+
 # Define targets
 TARGET_DIR="archiso/airootfs/root/chrome-unnamed"
 mkdir -p "$TARGET_DIR/modules"
@@ -27,8 +31,6 @@ cp -f install.sh "$TARGET_DIR/"
 cp -f modules/*.sh "$TARGET_DIR/modules/"
 
 # --- FRESHNESS GUARANTEE ---
-# Verify that the iteration number in the ISO source matches the local source
-LOCAL_VER=$(grep "BUILD_ITERATION=" install.sh | cut -d'"' -f2)
 ISO_VER=$(grep "BUILD_ITERATION=" "$TARGET_DIR/install.sh" | cut -d'"' -f2)
 
 if [ "$LOCAL_VER" != "$ISO_VER" ]; then
@@ -38,12 +40,12 @@ fi
 echo "SYNC VERIFIED: Building Iteration $ISO_VER"
 
 echo "PRE-FLIGHT: Ensuring clean workspace..."
+# Clean up build.log if it exists and is owned by root
+[ -f build.log ] && sudo rm -f build.log
 sudo rm -rf out/ work/
 
 # Check for disk space (need ~10GB for a safe build)
-# Use -P for POSIX compatibility to avoid line wrapping issues
 SPACE=$(df -P . | awk 'NR==2 {print $4}')
-# df -P output is in 1024-byte blocks. 10GB = 10 * 1024 * 1024 blocks.
 if [ "$SPACE" -lt 10485760 ]; then
     echo "WARNING: You have less than 10GB free. archiso usually needs ~10GB."
     read -p "Continue anyway? (y/n) " -n 1 -r
@@ -51,8 +53,9 @@ if [ "$SPACE" -lt 10485760 ]; then
     [[ ! $REPLY =~ ^[Yy]$ ]] && exit 1
 fi
 
-echo "BUILDING: Executing mkarchiso (this will take 5-15 mins). Check build.log for details."
-sudo mkarchiso -v -w work/ -o out/ archiso/ > build.log 2>&1
+echo "BUILDING: Executing mkarchiso (check build.log for logs)..."
+# Use 'tee' with sudo to allow writing to build.log even if script is run by user
+sudo mkarchiso -v -w work/ -o out/ archiso/ 2>&1 | sudo tee build.log > /dev/null
 
 # 3. AUTO-FLASH
 ISO=$(ls out/*.iso | head -n 1)
