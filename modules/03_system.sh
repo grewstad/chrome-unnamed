@@ -94,7 +94,7 @@ TIMEOUT=5
     KERNEL_PATH=uuid(${1}):${2}
     ${3}
     MODULE_PATH=uuid(${1}):${4}
-    CMDLINE=root=UUID=${5} rw loglevel=3 quiet btrfs_subvolume=@
+    CMDLINE=root=UUID=${5} rw loglevel=3 quiet rootflags=subvol=@
 EOF
 ' _ "$KERNEL_UUID" "$K_PATH" "$UCODE" "$I_PATH" "$ROOT_UUID"
 
