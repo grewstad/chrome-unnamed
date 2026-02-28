@@ -143,6 +143,14 @@ TIMEOUT=5
     MODULE_PATH=uuid(${1}):${4}
     # Fix: Explicitly mount the root subvolume for the kernel
     CMDLINE=root=UUID=${5} rw loglevel=3 quiet rootflags=subvol=@
+
+:CHROME-UNNAMED [RESCUE-CORE]
+    PROTOCOL=linux
+    KERNEL_PATH=uuid(${1}):${2}
+    ${3}
+    MODULE_PATH=uuid(${1}):${4}
+    # Single-user mode for built-in recovery
+    CMDLINE=root=UUID=${5} rw rootflags=subvol=@ single
 EOF
 ' _ "$KERNEL_UUID" "$K_PATH" "$UCODE" "$I_PATH" "$ROOT_UUID"
 
