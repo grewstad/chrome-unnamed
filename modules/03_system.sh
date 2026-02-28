@@ -9,10 +9,11 @@ set -e
 source "modules/00_helpers.sh"
 
 # 1. BASE SYSTEM DEPLOYMENT (PACSTRAP)
+# Omarchy Pattern: Injecting 'kernel-modules-hook' to prevent breakage after kernel updates
 gum spin --title "Injecting Arch Linux Zen Core... [Optimizing for low-latency workloads]" -- \
   pacstrap -K /mnt base linux-zen linux-firmware intel-ucode amd-ucode \
     btrfs-progs limine networkmanager nvim sudo efibootmgr zram-generator \
-    bash-completion zsh-completions --noconfirm
+    bash-completion zsh-completions kernel-modules-hook --noconfirm
 
 gum style --foreground 10 " [OK] Base system components successfully injected."
 
@@ -55,11 +56,26 @@ gum spin --title "Configuring locale and timezone..." -- bash -c '
   arch-chroot /mnt systemctl enable NetworkManager >> /mnt/root/chrome-unnamed/install.log 2>&1
 
   # ZRAM Strategy (50% of RAM, zstd compression)
-  cat <<EOF > /mnt/etc/systemd/zram-generator.conf
+  # FIX: Idempotent configuration check
+  if [ ! -f /mnt/etc/systemd/zram-generator.conf ]; then
+    cat <<EOF > /mnt/etc/systemd/zram-generator.conf
 [zram0]
 zram-size = ram / 2
 compression-algorithm = zstd
 EOF
+  fi
+
+  # Modern Btrfs Swap (Linux 6.1+ Pattern)
+  # Instead of old dd/truncate, we use the specific Btrfs mkswapfile command
+  if [ ! -f /mnt/swap/swapfile ]; then
+    mkdir -p /mnt/swap
+    arch-chroot /mnt btrfs filesystem mkswapfile --size 4G /swap/swapfile >> /mnt/root/chrome-unnamed/install.log 2>&1
+    arch-chroot /mnt swapon /swap/swapfile
+    echo "/swap/swapfile none swap defaults 0 0" >> /mnt/etc/fstab
+  fi
+
+  # Enable the Kernel Module Hook for reliability
+  arch-chroot /mnt systemctl enable linux-modules-cleanup.service >> /mnt/root/chrome-unnamed/install.log 2>&1
 ' _ "$HOSTNAME" "$KEYMAP"
 
 gum style --foreground 10 " [OK] Chronometrics and localization identity established."

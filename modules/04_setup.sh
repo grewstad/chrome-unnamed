@@ -40,11 +40,28 @@ SUDO_ACCESS=$(gum confirm "Grant $USERNAME administrative (sudo) privileges?" &&
 # 2. APPLICATION PAYLOAD
 APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber reflector zsh-autosuggestions zsh-syntax-highlighting"
 
-# Nvidia Driver Support
+# Nvidia Driver Support (Omarchy-Spec Advanced Probing)
 if lspci | grep -qi "nvidia"; then
   gum style --foreground 13 " [!] Nvidia GPU detected."
-  NV_CHOICE=$(gum choose "Nvidia Proprietary (Recommended for Hyprland)" "Nouveau (Open Source)" "Skip")
+  # Detect Turing+ architecture (16xx, 20xx, 30xx, 40xx)
+  # Turing/Ampere/Ada started with device IDs like 1e, 1f, 21, 22, 24, 25, 26, 27, 28
+  GPU_ID=$(lspci -n | grep "0300: 10de" | cut -d':' -f4 | cut -d' ' -f2)
+  if [[ "$GPU_ID" =~ ^(1e|1f|21|22|24|25|26|27|28) ]]; then
+    G_MSG="[Modern GPU Detected] Recommending Nvidia-Open-DKMS"
+    DEF_CHOICE="Nvidia-Open (Turing+)"
+  else
+    G_MSG="[Legacy/Pascal Detected] Recommending Nvidia-Proprietary"
+    DEF_CHOICE="Nvidia Proprietary"
+  fi
+  
+  gum style --foreground 15 "$G_MSG"
+  NV_CHOICE=$(gum choose "$DEF_CHOICE" "Nvidia Proprietary" "Nvidia-Open (Turing+)" "Nouveau (Open Source)" "Skip")
+  
   case "$NV_CHOICE" in
+    "Nvidia-Open"*)
+      APPS="$APPS nvidia-open-dkms nvidia-utils libva-nvidia-driver"
+      IS_NVIDIA=true
+      ;;
     "Nvidia Proprietary"*)
       APPS="$APPS nvidia-dkms nvidia-utils libva-nvidia-driver"
       IS_NVIDIA=true

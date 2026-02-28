@@ -13,8 +13,8 @@ fi
 # 2. BUILD
 echo "Starting ISO build process..."
 
-# Increment to V14 for stable fix build
-LOCAL_VER="14"
+# Increment to V15 for Omarchy-Spec refactor
+LOCAL_VER="15"
 sed -i "s/BUILD_ITERATION=\".*\"/BUILD_ITERATION=\"$LOCAL_VER\"/" install.sh
 
 # Define targets
