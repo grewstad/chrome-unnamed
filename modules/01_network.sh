@@ -1,25 +1,29 @@
-#!/bin/bash
-# chrome-unnamed: Network Module
-# NetworkManager starts automatically in the live ISO (enabled via airootfs).
+# ==============================================================================
+# Chrome-Unnamed: Network Subsystem
+# ==============================================================================
+# Orchestrates connectivity. The live ISO environment initializes NetworkManager
+# automatically, but this module forces an explicit state check and provides
+# an interactive uplink selection interface.
+# ==============================================================================
 
 # 1. PRE-FLIGHT CHECK
 if ping -c 1 1.1.1.1 &>/dev/null; then
-  gum style --foreground 15 "System is already online."
+  gum style --foreground 15 "[NET] Link established. System is online."
   return 0
 fi
 
-# 2. HARDWARE WAKE-UP
-# Unblock radios and trigger an explicit Wi-Fi rescan, then wait for cards to respond.
-gum spin --title "Waking up network hardware..." -- bash -c "
+# 2. HARDWARE ENERGIZATION
+# Unblock wireless radios and trigger an explicit spectrum sweep.
+gum spin --title "Energizing network interfaces..." -- bash -c "
   rfkill unblock all
   nmcli networking on
   nmcli dev wifi rescan 2>/dev/null
   sleep 4
 "
 
-# 3. CONNECTION METHOD
+# 3. UPLINK SELECTION
 while true; do
-  CONNECTION=$(gum choose "Wi-Fi" "Ethernet" "Skip (Offline Mode)")
+  CONNECTION=$(gum choose "Wi-Fi" "Ethernet" "Skip (Air-gapped Mode)")
 
   case $CONNECTION in
   "Wi-Fi")
@@ -27,50 +31,50 @@ while true; do
       NETWORKS=$(nmcli -t -f SSID dev wifi list 2>/dev/null | grep -v '^$' | sort -u)
 
       if [ -z "$NETWORKS" ]; then
-        gum style --foreground 15 "No networks found."
-        CHOICE=$(gum choose "Retry Scan" "Go Back")
-        if [ "$CHOICE" == "Retry Scan" ]; then
-          gum spin --title "Rescanning..." -- bash -c "nmcli dev wifi rescan && sleep 3"
+        gum style --foreground 15 "[NET] Void detected. No access points found."
+        CHOICE=$(gum choose "Sweep Spectrum" "Abort")
+        if [ "$CHOICE" == "Sweep Spectrum" ]; then
+          gum spin --title "Sweeping spectrum..." -- bash -c "nmcli dev wifi rescan && sleep 3"
           continue
         else
-          break # Exit Wi-Fi loop to main connection menu
+          break # Exit Wi-Fi loop to main overmind
         fi
       fi
 
-      SSID=$(echo "$NETWORKS" | gum choose --header "Select Network")
+      SSID=$(echo "$NETWORKS" | gum choose --header "Select target uplink")
       if [ -z "$SSID" ]; then
-        break # Exit Wi-Fi loop
+        break
       fi
 
-      PASS=$(gum input --password --placeholder "Enter Wi-Fi Password (leave blank if open)")
-      if gum spin --title "Connecting to $SSID..." -- nmcli dev wifi connect "$SSID" password "$PASS"; then
-        break 2 # Connected! Exit both Wi-Fi and Main loops
+      PASS=$(gum input --password --placeholder "Provide decryption key for uplink (blank if open)")
+      if gum spin --title "Establishing secure handshake with $SSID..." -- nmcli dev wifi connect "$SSID" password "$PASS"; then
+        break 2 # Connected! Break back to main pipeline
       else
-        gum style --foreground 15 "Connection failed. Wrong password?"
-        CHOICE=$(gum choose "Retry" "Go Back")
-        if [ "$CHOICE" == "Go Back" ]; then
-          break # Exit Wi-Fi loop
+        gum style --foreground 15 "[NET] Handshake failed. Decryption key invalid?"
+        CHOICE=$(gum choose "Retry Handshake" "Abort")
+        if [ "$CHOICE" == "Abort" ]; then
+          break
         fi
       fi
     done
     ;;
 
   "Ethernet")
-    gum spin --title "Waiting for DHCP..." -- sleep 5
+    gum spin --title "Acquiring IPv4 lease..." -- sleep 5
     break
     ;;
 
-  "Skip (Offline Mode)")
-    gum style --foreground 15 "⚠  Warning: Proceeding without a network."
+  "Skip (Air-gapped Mode)")
+    gum style --foreground 15 "[NET] Warning: Entering air-gapped mode. Proceeding offline."
     return 0
     ;;
   esac
 done
 
-# 4. VERIFICATION
+# 4. UPLINK VERIFICATION
 if ! ping -c 1 1.1.1.1 &>/dev/null; then
-  gum style --foreground 15 "Connection failed. Please check credentials or hardware."
+  gum style --foreground 15 "[NET] FATAL: Connection to the matrix severed. Verify hardware."
   return 1
 fi
 
-gum style --foreground 15 "Handshake Successful. Online."
+gum style --foreground 15 "[NET] Neural link established. System is online."
