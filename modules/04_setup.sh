@@ -72,7 +72,7 @@ gum style --foreground 10 " [OK] Software payload deployed."
 # 2a. LAPTOP OPTIMIZATIONS
 if [ "$HAS_BATTERY" == "true" ]; then
   gum spin --title "Optimizing for mobile hardware (TLP)..." -- \
-    arch-chroot /mnt systemctl enable tlp &>/dev/null
+    arch-chroot /mnt systemctl enable tlp >> /mnt/root/chrome-unnamed/install.log 2>&1
   gum style --foreground 10 " [OK] Laptop power management profile active."
 fi
 
@@ -86,7 +86,12 @@ gum spin --title "Initializing background services..." -- bash -c "
 gum spin --title "Configuring user accounts..." -- bash -c '
   # Pass passwords via stdin to chpasswd to avoid exposure in process lists
   printf "root:%s\n" "$1" | arch-chroot /mnt chpasswd
-  arch-chroot /mnt useradd -m -s /usr/bin/zsh "$2"
+  
+  # FIX: Check if user exists before creation to prevent crash on retry
+  if ! arch-chroot /mnt id "$2" &>/dev/null; then
+    arch-chroot /mnt useradd -m -s /usr/bin/zsh "$2"
+  fi
+  
   printf "%s:%s\n" "$2" "$3" | arch-chroot /mnt chpasswd
 ' _ "$ROOT_PASS" "$USERNAME" "$USER_PASS"
 

@@ -17,7 +17,8 @@ gum spin --title "Injecting Arch Linux Zen Core... [Optimizing for low-latency w
 gum style --foreground 10 " [OK] Base system components successfully injected."
 
 # 2. FILESYSTEM MAPPING (FSTAB)
-gum spin --title "Mapping filesystem structure (fstab)..." -- bash -c "genfstab -U /mnt >> /mnt/etc/fstab"
+# FIX: Use authoritative redirection (>) instead of append (>>) to prevent duplicates on retry
+gum spin --title "Mapping filesystem structure (fstab)..." -- bash -c "genfstab -U /mnt > /mnt/etc/fstab"
 
 # 3. LOCALE & HOSTNAME
 HOSTNAME=$(gum input --placeholder "Enter system hostname (e.g. archterra)")
@@ -49,8 +50,9 @@ gum spin --title "Configuring locale and timezone..." -- bash -c '
   sed -i "s/^HOOKS=(base udev/HOOKS=(base udev btrfs/" /mnt/etc/mkinitcpio.conf
 
   # Mkinitcpio: Ensure Btrfs hooks are active for the zen kernel
-  arch-chroot /mnt mkinitcpio -P &>/dev/null
-  arch-chroot /mnt systemctl enable NetworkManager &>/dev/null
+  # FIX: Redirect to install.log for transparency instead of /dev/null
+  arch-chroot /mnt mkinitcpio -P >> /mnt/root/chrome-unnamed/install.log 2>&1
+  arch-chroot /mnt systemctl enable NetworkManager >> /mnt/root/chrome-unnamed/install.log 2>&1
 
   # ZRAM Strategy (50% of RAM, zstd compression)
   cat <<EOF > /mnt/etc/systemd/zram-generator.conf
@@ -96,11 +98,12 @@ elif grep -qi "AMD" /proc/cpuinfo; then
 fi
 
 # Hardcoded Btrfs Layout Detection (Paths start with /@ for subvolume support)
+# BUG FIX: Only prepend /@ if /boot is NOT a separate partition
 K_PATH="/@/boot/vmlinuz-linux-zen"
 I_PATH="/@/boot/initramfs-linux-zen.img"
 if findmnt /mnt/boot &>/dev/null; then
-  K_PATH="/@/vmlinuz-linux-zen"
-  I_PATH="/@/initramfs-linux-zen.img"
+  K_PATH="/vmlinuz-linux-zen"
+  I_PATH="/initramfs-linux-zen.img"
 fi
 
 arch-chroot /mnt bash -c 'cat <<EOF > /etc/limine.conf
