@@ -1,74 +1,95 @@
+#!/bin/bash
 # chrome-unnamed: System Module
 
 # 1. PACSTRAP
-# Installing base system, linux-zen kernel, and essential tools.
 gum spin --title "Installing base system (this may take a few minutes)..." -- \
-  pacstrap -K /mnt base linux-zen linux-firmware btrfs-progs limine networkmanager nvim sudo --noconfirm
+  pacstrap -K /mnt base linux-zen linux-firmware intel-ucode amd-ucode \
+    btrfs-progs limine networkmanager nvim sudo efibootmgr --noconfirm
 
 # 2. FSTAB
-# Generate fstab using UUIDs.
 gum spin --title "Generating fstab..." -- bash -c "genfstab -U /mnt >> /mnt/etc/fstab"
 
 # 3. SYSTEM CONFIGURATION
 HOSTNAME=$(gum input --placeholder "Enter hostname (e.g. archterra)")
 if [ -z "$HOSTNAME" ]; then HOSTNAME="archterra"; fi
 
-gum spin --title "Configuring basic system settings..." -- bash -c "
-  echo '$HOSTNAME' > /mnt/etc/hostname
-  echo 'en_US.UTF-8 UTF-8' > /mnt/etc/locale.gen
-  echo "KEYMAP=$KEYMAP" > /mnt/etc/vconsole.conf
+gum spin --title "Configuring basic system settings..." -- bash -c '
+  echo "$1" > /mnt/etc/hostname
+  {
+    echo "127.0.0.1 localhost"
+    echo "::1       localhost"
+    echo "127.0.1.1 $1.localdomain $1"
+  } > /mnt/etc/hosts
+
+  echo "en_US.UTF-8 UTF-8" > /mnt/etc/locale.gen
+  echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
+  echo "KEYMAP=$2" > /mnt/etc/vconsole.conf
+
   ln -sf /usr/share/zoneinfo/UTC /mnt/etc/localtime
+  arch-chroot /mnt hwclock --systohc
   arch-chroot /mnt locale-gen &>/dev/null
-"
+  arch-chroot /mnt mkinitcpio -P &>/dev/null
+  arch-chroot /mnt systemctl enable NetworkManager &>/dev/null
+' _ "$HOSTNAME" "$KEYMAP"
 
 # 4. LIMINE BOOTLOADER
-# Limine is installed side-by-side. It lives in /efi/EFI/limine and /efi/limine.conf.
-# This won't overwrite your GRUB or systemd-boot files.
-gum spin --title "Installing Limine (Coexistence Mode)..." -- bash -c "
-  # Create localized directories for Limine
+# Determine which disk the EFI partition is on (needed for efibootmgr)
+EFI_SOURCE=$(findmnt -no SOURCE /mnt/efi)
+EFI_PART_NUM=$(lsblk -no PARTN "$EFI_SOURCE")
+TARGET_DISK="/dev/$(lsblk -no PKNAME "$EFI_SOURCE")"
+
+gum spin --title "Installing Limine EFI files..." -- bash -c "
   mkdir -p /mnt/efi/EFI/BOOT
-  mkdir -p /mnt/efi/limine
-  
-  # Deploy limine to the drive MBR/GPT (Optional but recommended for BIOS)
-  TARGET_DISK=\$(lsblk -no PKNAME \$(findmnt -no SOURCE /mnt/efi))
-  limine bios-install /dev/\$TARGET_DISK
-  
-  # Copy the EFI executable to a specific location
-  # Note: Keeping it in /EFI/BOOT/BOOTX64.EFI makes it a 'fallback' loader.
+  mkdir -p /mnt/efi/EFI/Limine
+
+  # Copy the EFI binary to both fallback and named locations
   cp /usr/share/limine/BOOTX64.EFI /mnt/efi/EFI/BOOT/BOOTX64.EFI
+  cp /usr/share/limine/BOOTX64.EFI /mnt/efi/EFI/Limine/BOOTX64.EFI
 "
 
 # 4b. LIMINE CONFIGURATION
-# Detect where kernels live (/boot partition vs root partition)
-KERNEL_PART=$(findmnt -no SOURCE /mnt/boot || findmnt -no SOURCE /mnt)
-KERNEL_UUID=$(lsblk -no UUID "$KERNEL_PART")
-ROOT_UUID=$(lsblk -no UUID $(findmnt -no SOURCE /mnt))
-
-# Determine path within the partition
-if findmnt /mnt/boot &>/dev/null; then
-  K_PATH="/vmlinuz-linux-zen"
-  M_PATH="/initramfs-linux-zen.img"
-else
-  K_PATH="/boot/vmlinuz-linux-zen"
-  M_PATH="/boot/initramfs-linux-zen.img"
+# Resolve where the kernel files live
+# Chain-booting: Kernels are usually in /boot on the ROOT partition.
+KERNEL_PART=$(findmnt -vno SOURCE /mnt/boot 2>/dev/null || findmnt -vno SOURCE /mnt)
+if [ -z "$KERNEL_PART" ]; then 
+    gum style --foreground 15 "ERROR: Could not find kernel partition."
+    exit 1
 fi
 
-gum spin --title "Creating Limine configuration..." -- bash -c "
-cat <<EOF > /mnt/efi/limine.conf
-TIMEOUT=3
-SERIAL=no
+KERNEL_UUID=$(lsblk -no UUID "$KERNEL_PART")
+ROOT_PART=$(findmnt -vno SOURCE /mnt)
+ROOT_UUID=$(lsblk -no UUID "$ROOT_PART")
 
-:Arch Linux (Zen)
-    PROTOCOL=linux
-    # Limine syntax for UUID: boot://(uuid:UUID_HERE)/path
-    KERNEL_PATH=boot://(uuid:$KERNEL_UUID)$K_PATH
-    MODULE_PATH=boot://(uuid:$KERNEL_UUID)$M_PATH
-    CMDLINE=root=UUID=$ROOT_UUID rw rootflags=subvol=@
+# Detect CPU for microcode
+UCODE=""
+if grep -q "Intel" /proc/cpuinfo; then
+    UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/boot/intel-ucode.img"
+    # Fallback if /boot is separate
+    if findmnt /mnt/boot &>/dev/null; then UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/intel-ucode.img"; fi
+elif grep -q "AMD" /proc/cpuinfo; then
+    UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/boot/amd-ucode.img"
+    if findmnt /mnt/boot &>/dev/null; then UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/amd-ucode.img"; fi
+fi
+
+if findmnt /mnt/boot &>/dev/null; then
+  K_PATH="/vmlinuz-linux-zen"
+  I_PATH="/initramfs-linux-zen.img"
+else
+  K_PATH="/boot/vmlinuz-linux-zen"
+  I_PATH="/boot/initramfs-linux-zen.img"
+fi
+
 EOF
-"
+' _ "$KERNEL_UUID" "$K_PATH" "$UCODE" "$I_PATH" "$ROOT_UUID"
 
-gum style --foreground 82 "Limine installed successfully alongside your existing bootloaders."
+# 4c. REGISTER UEFI BOOT ENTRY
+# Without this step, the bootloader file exists but firmware doesn't know about it.
+gum spin --title "Registering UEFI boot entry..." -- \
+  efibootmgr --create \
+    --disk "$TARGET_DISK" \
+    --part "$EFI_PART_NUM" \
+    --loader '/EFI/Limine/BOOTX64.EFI' \
+    --label 'Chrome-Unnamed (Limine)' \
+    --unicode
 
-
-
-
+gum style --foreground 15 "Limine installed and registered in UEFI firmware successfully."

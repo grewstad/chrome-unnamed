@@ -5,7 +5,7 @@ fi
 
 # Chrome-Unnamed Auto-Starter
 if [ -f /root/chrome-unnamed/install.sh ]; then
-    gum style --foreground 212 --border-foreground 212 --border double \
+    gum style --foreground 15 --border-foreground 15 --border double \
         --align center --width 50 --margin "1 2" --padding "2 4" \
         "CHROME-UNNAMED" "Live ISO Environment"
     

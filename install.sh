@@ -3,6 +3,13 @@
 set -e
 trap 'gum style --foreground 15 "CRITICAL ERROR: Installer crashed or a command failed. Aborting." ; exit 1' ERR
 
+# --- BUILD VERIFICATION ---
+BUILD_ITERATION="1"
+
+# DEBUG STATUS
+gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
+  "CHROME-UNNAMED INDUSTRIAL GRADE HARDENED ISO (2026-02-28) - ITERATION $BUILD_ITERATION"
+
 # 1. BOOTSTRAP
 if ! command -v gum &>/dev/null; then
   echo "Installing gum (TUI helper)..."

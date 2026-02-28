@@ -1,30 +1,54 @@
 #!/bin/bash
 # Chrome-Unnamed: Main Installer Entry Point
+set -e
+trap 'gum style --foreground 15 "CRITICAL ERROR: Installer crashed or a command failed. Aborting." ; exit 1' ERR
 
 # 1. BOOTSTRAP
-# Ensure gum is installed for the TUI.
-if ! command -v gum &> /dev/null; then
+if ! command -v gum &>/dev/null; then
   echo "Installing gum (TUI helper)..."
-  pacman -Sy gum --noconfirm &>/dev/null
+  pacman -Sy gum --noconfirm --needed &>/dev/null
 fi
 
-# 2. WELCOME
+# 1b. TOOL CHECK
+for tool in reflector lsblk awk grep findmnt; do
+    if ! command -v "$tool" &>/dev/null; then
+        echo "Error: Required tool '$tool' is missing."
+        exit 1
+    fi
+done
+
+# 2. PREREQUISITES & SAFETY CHECKS
+if [ ! -d "/sys/firmware/efi/efivars" ]; then
+    gum style --foreground 15 "ERROR: System not booted in UEFI mode. This installer requires UEFI."
+    exit 1
+fi
+
+# 3. WELCOME & NETWORK
 gum style \
-	--foreground 212 --border-foreground 212 --border double \
+	--foreground 15 --border-foreground 15 --border double --bold \
 	--align center --width 50 --margin "1 2" --padding "2 4" \
 	"CHROME-UNNAMED" "Arch Linux Installer"
 
-# 3. KEYBOARD LAYOUT
-# Prompt for keyboard layout, default to US.
-KEYMAP=$(localectl list-keymaps | gum filter --placeholder "Select keyboard layout (default: us)")
-if [ -z "$KEYMAP" ]; then KEYMAP="us"; fi
+source "modules/01_network.sh"
 
+if gum confirm "Optimize mirrorlist before starting (Recommended)?"; then
+    if nm-online -t 5 >/dev/null; then
+        gum spin --title "Optimizing mirrors (reflector)..." -- \
+            reflector --latest 20 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+    else
+        gum style --foreground 15 "Warning: Network offline, skipping mirror optimization."
+    fi
+fi
+
+# 4. KEYBOARD LAYOUT
+KEYMAPS=$(localectl list-keymaps)
+KEYMAP=$(echo -e "us\n$KEYMAPS" | gum filter --placeholder "Select keyboard layout (default: us)")
+if [ -z "$KEYMAP" ]; then KEYMAP="us"; fi
+export KEYMAP
 gum spin --title "Applying keymap $KEYMAP..." -- loadkeys "$KEYMAP"
 
-# 4. EXECUTION
-# Run modules in order.
+# 5. EXECUTION
 modules=(
-  "modules/01_network.sh"
   "modules/02_disk.sh"
   "modules/03_system.sh"
   "modules/04_setup.sh"
@@ -32,16 +56,14 @@ modules=(
 
 for module in "${modules[@]}"; do
   if [ -f "$module" ]; then
+    # We remove set +e here so failures crash the installer immediately.
+    # shellcheck source=/dev/null
     source "$module"
-    if [ $? -ne 0 ]; then
-      gum style --foreground 196 "Module $module failed. Aborting."
-      exit 1
-    fi
   else
     echo "Error: $module not found."
     exit 1
   fi
 done
 
-# 4. FINISH
-gum confirm "Installation complete! Would you like to reboot now?" && reboot
+# 6. FINISH
+gum confirm "Installation complete! Reboot now?" && reboot

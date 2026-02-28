@@ -1,57 +1,69 @@
+#!/bin/bash
 # chrome-unnamed: Setup Module
 
-# 1. INTERACTIVE PROMPTS
+# 1. INTERACTIVE PROMPTS — collect everything before making changes
 ROOT_PASS=$(gum input --password --placeholder "Set Root Password")
+if [ -z "$ROOT_PASS" ]; then
+  gum style --foreground 15 "Root password cannot be empty. Aborting."
+  return 1
+fi
 
 USERNAME=$(gum input --placeholder "Enter Username (e.g. grewstad)")
 if [ -z "$USERNAME" ]; then USERNAME="user"; fi
 
 USER_PASS=$(gum input --password --placeholder "Set Password for $USERNAME")
+if [ -z "$USER_PASS" ]; then
+  gum style --foreground 15 "User password cannot be empty. Aborting."
+  return 1
+fi
 
 SUDO_ACCESS=$(gum confirm "Give $USERNAME sudo (wheel) access?" && echo "yes" || echo "no")
 
 # 2. APPLICATION INSTALLATION
-# Installing opinionated apps and requirements for the configs.
-APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel"
+APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber reflector"
 
 gum spin --title "Installing applications..." -- \
-  pacstrap -K /mnt $APPS --noconfirm
+  pacstrap -K /mnt "$APPS" --noconfirm
+
+# 2b. POST-INSTALL SERVICE ENABLEMENT
+gum spin --title "Enabling services..." -- bash -c "
+  arch-chroot /mnt systemctl enable systemd-timesyncd &>/dev/null
+  arch-chroot /mnt systemctl enable reflector.timer &>/dev/null
+"
 
 # 3. USER CREATION & PASSWORDS
-gum spin --title "Setting up user accounts..." -- bash -c "
-  # Root password
-  echo 'root:$ROOT_PASS' | arch-chroot /mnt chpasswd
-  
-  # User creation
-  arch-chroot /mnt useradd -m -s /usr/bin/zsh $USERNAME
-  echo '$USERNAME:$USER_PASS' | arch-chroot /mnt chpasswd
-"
+gum spin --title "Setting up user accounts..." -- bash -c '
+  # Pass passwords via stdin to chpasswd to avoid exposure in process lists
+  printf "root:%s\n" "$1" | arch-chroot /mnt chpasswd
+  arch-chroot /mnt useradd -m -s /usr/bin/zsh "$2"
+  printf "%s:%s\n" "$2" "$3" | arch-chroot /mnt chpasswd
+' _ "$ROOT_PASS" "$USERNAME" "$USER_PASS"
 
 # 4. SUDOERS CONFIGURATION
 if [ "$SUDO_ACCESS" == "yes" ]; then
   gum spin --title "Configuring sudoers..." -- bash -c "
-    arch-chroot /mnt usermod -aG wheel $USERNAME
+    arch-chroot /mnt usermod -aG wheel ${USERNAME}
     sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /mnt/etc/sudoers
   "
 fi
 
 # 5. DOTFILES & PAYLOAD DEPLOYMENT
-gum spin --title "Deploying configuration (payload)..." -- bash -c "
-  # Copy local payload to target user home
-  mkdir -p /mnt/home/$USERNAME/.config
-  cp -r payload/.config/* /mnt/home/$USERNAME/.config/
-  
-  # Set ownership
-  arch-chroot /mnt chown -R $USERNAME:$USERNAME /home/$USERNAME/
-"
+REPO_URL="https://github.com/grewstad/chrome-unnamed.git"
+gum spin --title "Fetching dotfiles from GitHub..." -- bash -c '
+  rm -rf /tmp/payload_repo
+  git clone --depth 1 "$1" /tmp/payload_repo &>/dev/null
+  if [ -d "/tmp/payload_repo/payload/.config" ]; then
+    mkdir -p /mnt/home/"$2"/.config
+    cp -rn /tmp/payload_repo/payload/.config/* /mnt/home/"$2"/.config/
+  fi
+  arch-chroot /mnt chown -R "$2":"$2" /home/"$2"/
+  rm -rf /tmp/payload_repo
+' _ "$REPO_URL" "$USERNAME"
 
 # 6. SHELL POLISH
-# Create a basic .zshrc if it doesn't exist to avoid the first-run wizard
 gum spin --title "Finalizing shell settings..." -- bash -c "
-  if [ ! -f /mnt/home/$USERNAME/.zshrc ]; then
-    touch /mnt/home/$USERNAME/.zshrc
-  fi
-  arch-chroot /mnt chown $USERNAME:$USERNAME /home/$USERNAME/.zshrc
+  [ ! -f /mnt/home/${USERNAME}/.zshrc ] && touch /mnt/home/${USERNAME}/.zshrc
+  arch-chroot /mnt chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.zshrc
 "
 
-gum style --foreground 82 "Setup complete. User $USERNAME created with Zsh and custom dotfiles."
+gum style --foreground 15 "Setup complete. User ${USERNAME} created with Zsh and custom dotfiles."
