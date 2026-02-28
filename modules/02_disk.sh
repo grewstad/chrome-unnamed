@@ -6,6 +6,7 @@
 # ==============================================================================
 
 set -e
+source "modules/00_helpers.sh"
 
 # 1. TOPOLOGICAL OVERRIDE
 MODE=$(gum choose "Pre-partitioned (Mount existing topological map)" "Manual override (Launch cfdisk map editor)")

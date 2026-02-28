@@ -6,6 +6,7 @@
 # ==============================================================================
 
 set -e
+source "modules/00_helpers.sh"
 
 # 1. AUTHORIZATION PROMPTS
 # Collect all credentials before entering the long-running execution phase.

@@ -10,15 +10,12 @@
 set -e
 trap 'gum style --foreground 15 "CRITICAL FAULT: Deployment sequence interrupted. Jacking out." ; exit 1' ERR
 
-# --- GLOBAL TELEMETRY ---
-# Duplicate all stdout and stderr to the live environment's log file.
-LOG_FILE="/etc/chrome-unnamed-install.log"
-exec > >(tee -i "$LOG_FILE") 2>&1
-
-echo "[INIT] Chrome-Unnamed Deployment Sequence Started at $(date)"
+# --- GLOBAL TELEMETRY & HELPERS ---
+source "modules/00_helpers.sh"
+echo "[INIT] Chrome-Unnamed Deployment Matrix Initialized at $(date)" > "$LOG_FILE"
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="4"
+BUILD_ITERATION="5"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
@@ -41,12 +38,7 @@ for tool in reflector lsblk awk grep findmnt; do
 done
 
 # --- HELPER FUNCTIONS ---
-clean_path() {
-  local input="$1"
-  # Use lsblk -P values directly (or raw), stripping any non-absolute prefix noise
-  # This makes it immune to tree characters and alignment junk
-  echo "$input" | head -n1 | sed -E 's|^[^/]*(/dev/)?|/dev/|; s|^/dev//dev/|/dev/|' | tr -d ' \n\r\t'
-}
+# Functions are now sourced from modules/00_helpers.sh
 
 # 2. PREREQUISITES & UEFI VALIDATION
 # Chrome-Unnamed strictly enforces modern UEFI paradigms. Legacy BIOS is not supported.
@@ -64,12 +56,12 @@ gum style \
 echo "[CORE] Initiating network handshake protocol..."
 source "modules/01_network.sh"
 
-if gum confirm "Fetch the fastest mirror matrix? (Highly Recommended)"; then
-    if nm-online -t 5 >/dev/null; then
-        gum spin --title "Synchronizing with optimum mirrors (reflector)..." -- \
-            reflector --latest 20 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+if gum confirm "Synchronize with the optimal mirror matrix? (Highly Recommended)"; then
+    if nm-online -t 10 >/dev/null; then
+        gum spin --title "Calibrating mirrors (reflector)..." -- \
+            bash -c "reflector --latest 8 --protocol https --sort rate --save /etc/pacman.d/mirrorlist >> \"$LOG_FILE\" 2>&1"
     else
-        gum style --foreground 15 "Warning: Network offline. Proceeding with default mirror configuration."
+        gum style --foreground 15 "Warning: Network signal not detected. Skipping calibration."
     fi
 fi
 

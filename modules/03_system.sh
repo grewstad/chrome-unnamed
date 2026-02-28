@@ -6,6 +6,7 @@
 # ==============================================================================
 
 set -e
+source "modules/00_helpers.sh"
 
 # 1. CORE INJECTION (PACSTRAP)
 gum spin --title "Injecting base operating system core (this will take a moment)..." -- \
