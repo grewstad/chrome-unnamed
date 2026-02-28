@@ -6,6 +6,9 @@
 # an interactive uplink selection interface.
 # ==============================================================================
 
+set -e
+source "modules/00_helpers.sh"
+
 # 1. PRE-FLIGHT CHECK
 if ping -c 1 1.1.1.1 &>/dev/null; then
   gum style --foreground 15 "[NET] Link established. System is online."
