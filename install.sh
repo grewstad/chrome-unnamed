@@ -8,7 +8,8 @@
 # ==============================================================================
 
 set -e
-trap 'gum style --foreground 15 "FATAL: Deployment failed in $(basename "$0") at line $LINENO. Check $LOG_FILE for details." ; exit 1' ERR
+trap 'stty sane; gum style --foreground 15 "FATAL: Deployment failed in $(basename "$0") at line $LINENO. Check $LOG_FILE for details." ; exit 1' ERR
+trap 'stty sane; echo -e "\n[EXIT] User interrupted. Shutting down."; exit 1' SIGINT
 
 # --- GLOBAL TELEMETRY & HELPERS ---
 source "modules/00_helpers.sh"
@@ -18,7 +19,7 @@ echo "[INIT] Chrome-Unnamed Installation Suite Started at $(date)" > "$LOG_FILE"
 profile_hardware
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="7"
+BUILD_ITERATION="8"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
@@ -105,7 +106,10 @@ if mountpoint -q /mnt; then
     # Also copy to the user's home for immediate visibility
     if [ -d "/mnt/home/$USERNAME" ]; then
         cp "$LOG_FILE" "/mnt/home/$USERNAME/install.log" 2>/dev/null || true
+        # Make sure user owns it
+        chroot /mnt chown "$USERNAME":"$USERNAME" "/home/$USERNAME/install.log" 2>/dev/null || true
     fi
 fi
 
+stty sane
 gum confirm "Deployment successful. System is primed. Reboot now?" && reboot

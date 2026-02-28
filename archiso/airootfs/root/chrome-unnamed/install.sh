@@ -8,26 +8,26 @@
 # ==============================================================================
 
 set -e
-trap 'gum style --foreground 15 "CRITICAL FAULT: Deployment sequence interrupted. Jacking out." ; exit 1' ERR
+trap 'gum style --foreground 15 "FATAL: Deployment failed in $(basename "$0") at line $LINENO. Check $LOG_FILE for details." ; exit 1' ERR
 
-# --- GLOBAL TELEMETRY ---
-# Duplicate all stdout and stderr to the live environment's log file.
-LOG_FILE="/etc/chrome-unnamed-install.log"
-exec > >(tee -i "$LOG_FILE") 2>&1
+# --- GLOBAL TELEMETRY & HELPERS ---
+source "modules/00_helpers.sh"
+# LOG_FILE is defined in modules/00_helpers.sh as /root/chrome-unnamed/install.log
 
-echo "[INIT] Chrome-Unnamed Deployment Sequence Started at $(date)"
+echo "[INIT] Chrome-Unnamed Installation Suite Started at $(date)" > "$LOG_FILE"
+profile_hardware
 
 # --- BUILD VERIFICATION ---
-BUILD_ITERATION="4"
+BUILD_ITERATION="7"
 
 # DEBUG STATUS
 gum style --border normal --padding "1 4" --border-foreground 15 --foreground 15 --bold \
-  "CHROME-UNNAMED INDUSTRIAL GRADE HARDENED ISO (2026-02-28) - ITERATION $BUILD_ITERATION"
+  "CHROME-UNNAMED HARDENED ISO (2026-02-28) - V$BUILD_ITERATION [STABLE]"
 
 # 1. DEPENDENCY INJECTION
 # Ensure the TUI rendering engine (gum) is present in the live environment.
 if ! command -v gum &>/dev/null; then
-  echo "[INIT] Injecting TUI dependencies (gum)..."
+  echo "[INIT] Resolving UI dependencies (gum)..."
   pacman -Sy gum --noconfirm --needed &>/dev/null
 fi
 
@@ -41,12 +41,7 @@ for tool in reflector lsblk awk grep findmnt; do
 done
 
 # --- HELPER FUNCTIONS ---
-clean_path() {
-  local input="$1"
-  # Use lsblk -P values directly (or raw), stripping any non-absolute prefix noise
-  # This makes it immune to tree characters and alignment junk
-  echo "$input" | head -n1 | sed -E 's|^[^/]*(/dev/)?|/dev/|; s|^/dev//dev/|/dev/|' | tr -d ' \n\r\t'
-}
+# Functions are now sourced from modules/00_helpers.sh
 
 # 2. PREREQUISITES & UEFI VALIDATION
 # Chrome-Unnamed strictly enforces modern UEFI paradigms. Legacy BIOS is not supported.
@@ -59,17 +54,17 @@ fi
 gum style \
 	--foreground 15 --border-foreground 15 --border double --bold \
 	--align center --width 50 --margin "1 2" --padding "2 4" \
-	"CHROME-UNNAMED" "Arch Deployment Matrix"
+	"CHROME-UNNAMED" "Automated Installer"
 
-echo "[CORE] Initiating network handshake protocol..."
+echo "[CORE] Starting network discovery..."
 source "modules/01_network.sh"
 
-if gum confirm "Fetch the fastest mirror matrix? (Highly Recommended)"; then
-    if nm-online -t 5 >/dev/null; then
-        gum spin --title "Synchronizing with optimum mirrors (reflector)..." -- \
-            reflector --latest 20 --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+if gum confirm "Optimize repository mirrors with Reflector? (Recommended)"; then
+    if nm-online -t 15 >/dev/null; then
+        gum spin --title "Optimizing mirrors for maximum throughput..." -- \
+            bash -c "reflector --latest 10 --protocol https --sort rate --save /etc/pacman.d/mirrorlist >> \"$LOG_FILE\" 2>&1"
     else
-        gum style --foreground 15 "Warning: Network offline. Proceeding with default mirror configuration."
+        gum style --foreground 15 "Warning: Network offline. Skipping mirror optimization."
     fi
 fi
 
@@ -78,7 +73,7 @@ KEYMAPS=$(localectl list-keymaps)
 KEYMAP=$(echo -e "us\n$KEYMAPS" | gum filter --placeholder "Select your weapon (Keyboard Layout, default: us)")
 if [ -z "$KEYMAP" ]; then KEYMAP="us"; fi
 export KEYMAP
-gum spin --title "Injecting keymap payload: $KEYMAP..." -- loadkeys "$KEYMAP"
+gum spin --title "Applying keyboard layout: $KEYMAP..." -- loadkeys "$KEYMAP"
 
 # 5. MODULE EXECUTION PIPELINE
 # The installer is modularly segmented for maintainability.
@@ -91,7 +86,7 @@ modules=(
 
 for module in "${modules[@]}"; do
   if [ -f "$module" ]; then
-    echo "[PIPELINE] Executing $module..."
+    echo "[PIPELINE] Running $module..."
     # 'set -e' is preserved inside modules to ensure immediate failure on error.
     # shellcheck source=/dev/null
     source "$module"
@@ -102,11 +97,15 @@ for module in "${modules[@]}"; do
 done
 
 # 6. TELEMETRY PERSISTENCE & FINALIZE
-echo "[CORE] Copying installation forensic logs to installed filesystem..."
+echo "[CORE] Persisting installation logs to the local device..."
 # /mnt is active if module 02/03 succeeded
 if mountpoint -q /mnt; then
     mkdir -p /mnt/var/log/
     cp "$LOG_FILE" /mnt/var/log/chrome-unnamed-install.log 2>/dev/null || true
+    # Also copy to the user's home for immediate visibility
+    if [ -d "/mnt/home/$USERNAME" ]; then
+        cp "$LOG_FILE" "/mnt/home/$USERNAME/install.log" 2>/dev/null || true
+    fi
 fi
 
-gum confirm "Deployment sequence complete. System is primed. Jack out and reboot?" && reboot
+gum confirm "Deployment successful. System is primed. Reboot now?" && reboot

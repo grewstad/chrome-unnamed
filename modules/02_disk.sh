@@ -9,6 +9,7 @@ set -e
 source "modules/00_helpers.sh"
 
 # 1. PARTITIONING OVERRIDE (Optional)
+stty sane
 MODE=$(gum choose "Use existing partitions" "Manual partitioning (cfdisk)")
 
 if [ "$MODE" == "Manual partitioning (cfdisk)" ]; then
@@ -22,7 +23,9 @@ if [ "$MODE" == "Manual partitioning (cfdisk)" ]; then
 fi
 
 # 2. DEVICE DISCOVERY
-PART_LIST=$(lsblk -plno NAME,SIZE,TYPE,FSTYPE,LABEL | grep "part")
+# We use a spinner here because disk probing can occasionally hang or take time
+gum spin --title "Probing hardware for partitions..." -- bash -c 'lsblk -plno NAME,SIZE,TYPE,FSTYPE,LABEL | grep "part" > /tmp/part_list'
+PART_LIST=$(cat /tmp/part_list)
 
 if [ -z "$PART_LIST" ]; then
   gum style --foreground 15 "[DISK] No partitions detected. Please partition the drive first."
@@ -53,6 +56,7 @@ select_partition() {
   fi
 
   local selected_raw
+  stty sane
   selected_raw=$(echo "$choices" | gum choose --header "$prompt")
   local selected
   # Leverage global helper to ensure 100% path accuracy

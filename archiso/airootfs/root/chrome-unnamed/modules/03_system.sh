@@ -6,20 +6,21 @@
 # ==============================================================================
 
 set -e
+source "modules/00_helpers.sh"
 
-# 1. CORE INJECTION (PACSTRAP)
-gum spin --title "Injecting base operating system core (this will take a moment)..." -- \
+# 1. BASE SYSTEM DEPLOYMENT (PACSTRAP)
+gum spin --title "Deploying base operating system components..." -- \
   pacstrap -K /mnt base linux-zen linux-firmware intel-ucode amd-ucode \
     btrfs-progs limine networkmanager nvim sudo efibootmgr --noconfirm
 
-# 2. TOPOLOGY MAPPING (FSTAB)
-gum spin --title "Mapping filesystem topology (fstab)..." -- bash -c "genfstab -U /mnt >> /mnt/etc/fstab"
+# 2. FILESYSTEM MAPPING (FSTAB)
+gum spin --title "Mapping filesystem structure (fstab)..." -- bash -c "genfstab -U /mnt >> /mnt/etc/fstab"
 
-# 3. CHRONOMETRICS & LINGUISTICS
-HOSTNAME=$(gum input --placeholder "Designate system identifier (Hostname, e.g. archterra)")
+# 3. LOCALE & HOSTNAME
+HOSTNAME=$(gum input --placeholder "Enter system hostname (e.g. archterra)")
 if [ -z "$HOSTNAME" ]; then HOSTNAME="archterra"; fi
 
-gum spin --title "Configuring local chronometrics and linguistics..." -- bash -c '
+gum spin --title "Configuring locale and timezone..." -- bash -c '
   echo "$1" > /mnt/etc/hostname
   {
     echo "127.0.0.1 localhost"
@@ -38,13 +39,13 @@ gum spin --title "Configuring local chronometrics and linguistics..." -- bash -c
   arch-chroot /mnt systemctl enable NetworkManager &>/dev/null
 ' _ "$HOSTNAME" "$KEYMAP"
 
-# 4. BOOTLOADER PAYLOAD (LIMINE)
+# 4. BOOTLOADER SETUP (LIMINE)
 # Determine which disk the EFI partition is on (needed for efibootmgr)
 EFI_SOURCE=$(findmnt -no SOURCE /mnt/efi | head -n1)
 EFI_PART_NUM=$(lsblk -n -o PARTN "$EFI_SOURCE" | head -n1)
 TARGET_DISK="/dev/$(lsblk -n -o PKNAME "$EFI_SOURCE" | head -n1)"
 
-gum spin --title "Deploying Limine EFI payload..." -- bash -c "
+gum spin --title "Installing Limine bootloader..." -- bash -c "
   mkdir -p /mnt/efi/EFI/BOOT
   mkdir -p /mnt/efi/EFI/Limine
 
@@ -68,11 +69,11 @@ ROOT_UUID=$(lsblk -no UUID "$ROOT_PART")
 
 # Detect CPU for microcode
 UCODE=""
-if grep -q "Intel" /proc/cpuinfo; then
+# Use -m 1 to avoid multiple lines if CPU has many cores
+if grep -qi "Intel" /proc/cpuinfo; then
     UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/boot/intel-ucode.img"
-    # Fallback if /boot is separate
     if findmnt /mnt/boot &>/dev/null; then UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/intel-ucode.img"; fi
-elif grep -q "AMD" /proc/cpuinfo; then
+elif grep -qi "AMD" /proc/cpuinfo; then
     UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/boot/amd-ucode.img"
     if findmnt /mnt/boot &>/dev/null; then UCODE="MODULE_PATH=uuid(${KERNEL_UUID}):/amd-ucode.img"; fi
 fi
@@ -93,13 +94,13 @@ TIMEOUT=5
     KERNEL_PATH=uuid(${1}):${2}
     ${3}
     MODULE_PATH=uuid(${1}):${4}
-    CMDLINE=root=UUID=${5} rw loglevel=3 quiet btrfs_subvolume=@
+    CMDLINE=root=UUID=${5} rw loglevel=3 quiet rootflags=subvol=@
 EOF
 ' _ "$KERNEL_UUID" "$K_PATH" "$UCODE" "$I_PATH" "$ROOT_UUID"
 
 # 4c. REGISTER UEFI BOOT ENTRY
 # Without this step, the bootloader file exists but NVRAM firmware doesn't know about it.
-gum spin --title "Inscribing UEFI boot records into firmware NVRAM..." -- \
+gum spin --title "Registering UEFI boot entry in NVRAM..." -- \
   efibootmgr --create \
     --disk "$TARGET_DISK" \
     --part "$EFI_PART_NUM" \
@@ -107,4 +108,4 @@ gum spin --title "Inscribing UEFI boot records into firmware NVRAM..." -- \
     --label 'Chrome-Unnamed (Limine)' \
     --unicode > /dev/null
 
-gum style --foreground 15 "[SYS] Limine bootloader successfully inscribed. System is autonomous."
+gum style --foreground 15 "[SYS] Limine bootloader installed. System is autonomous."

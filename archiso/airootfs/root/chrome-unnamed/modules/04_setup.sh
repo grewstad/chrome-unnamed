@@ -6,40 +6,49 @@
 # ==============================================================================
 
 set -e
+source "modules/00_helpers.sh"
 
-# 1. AUTHORIZATION PROMPTS
+# 1. USER PROMPTS
 # Collect all credentials before entering the long-running execution phase.
-ROOT_PASS=$(gum input --password --placeholder "Establish Overseer (Root) passphrase")
-if [ -z "$ROOT_PASS" ]; then
-  gum style --foreground 15 "[SEC] FATAL: Overseer passphrase required. Authorization failure."
-  return 1
-fi
+while true; do
+  ROOT_PASS=$(gum input --password --placeholder "Set Root password")
+  ROOT_PASS_CONFIRM=$(gum input --password --placeholder "Confirm Root password")
+  if [ "$ROOT_PASS" == "$ROOT_PASS_CONFIRM" ] && [ -n "$ROOT_PASS" ]; then
+    break
+  else
+    gum style --foreground 15 "Passwords do not match or are empty. Please retry."
+  fi
+done
 
-USERNAME=$(gum input --placeholder "Designate Operator handle (Username, e.g. grewstad)")
+USERNAME=$(gum input --placeholder "Enter Username (e.g. grewstad)")
 if [ -z "$USERNAME" ]; then USERNAME="user"; fi
 
-USER_PASS=$(gum input --password --placeholder "Establish passphrase for Operator $USERNAME")
-if [ -z "$USER_PASS" ]; then
-  gum style --foreground 15 "[SEC] FATAL: Operator passphrase required. Authorization failure."
-  return 1
-fi
+while true; do
+  USER_PASS=$(gum input --password --placeholder "Set password for user $USERNAME")
+  USER_PASS_CONFIRM=$(gum input --password --placeholder "Confirm password for user $USERNAME")
+  if [ "$USER_PASS" == "$USER_PASS_CONFIRM" ] && [ -n "$USER_PASS" ]; then
+    break
+  else
+    gum style --foreground 15 "Passwords do not match or are empty. Please retry."
+  fi
+done
 
-SUDO_ACCESS=$(gum confirm "Grant Operator $USERNAME elevated (wheel) privileges?" && echo "yes" || echo "no")
+SUDO_ACCESS=$(gum confirm "Grant $USERNAME administrative (sudo) privileges?" && echo "yes" || echo "no")
 
 # 2. APPLICATION PAYLOAD
 APPS="hyprland hyprpaper rofi ghostty zsh git firefox waybar fastfetch base-devel pipewire pipewire-pulse pipewire-alsa pipewire-jack wireplumber reflector"
 
-gum spin --title "Downloading software payload matrix..." -- \
+gum spin --title "Installing software packages..." -- \
   pacstrap -K /mnt "$APPS" --noconfirm
 
-# 2b. DAEMON ACTIVATION
-gum spin --title "Activating background daemons..." -- bash -c "
+# 2b. SERVICE INITIALIZATION
+gum spin --title "Initializing background services..." -- bash -c "
   arch-chroot /mnt systemctl enable systemd-timesyncd &>/dev/null
   arch-chroot /mnt systemctl enable reflector.timer &>/dev/null
 "
 
-# 3. IDENTITY FORGING (CRENDENTIALS)
-gum spin --title "Forging Operator credentials in shadow file..." -- bash -c '
+# 3. USER ACCOUNT SETUP
+gum spin --title "Configuring user accounts..." -- bash -c '
   # Pass passwords via stdin to chpasswd to avoid exposure in process lists
   printf "root:%s\n" "$1" | arch-chroot /mnt chpasswd
   arch-chroot /mnt useradd -m -s /usr/bin/zsh "$2"
@@ -48,15 +57,15 @@ gum spin --title "Forging Operator credentials in shadow file..." -- bash -c '
 
 # 4. PRIVILEGE ESCALATION
 if [ "$SUDO_ACCESS" == "yes" ]; then
-  gum spin --title "Injecting privilege escalation vectors (sudoers)..." -- bash -c "
+  gum spin --title "Configuring administrative access (sudo)..." -- bash -c "
     arch-chroot /mnt usermod -aG wheel ${USERNAME}
     sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /mnt/etc/sudoers
   "
 fi
 
-# 5. GEOMETRIC SYNC (DOTFILES)
+# 5. DESKTOP CONFIGURATIONS (DOTFILES)
 REPO_URL="https://github.com/grewstad/chrome-unnamed.git"
-gum spin --title "Synchronizing geometric configurations from origin..." -- bash -c '
+gum spin --title "Downloading desktop configurations..." -- bash -c '
   rm -rf /tmp/payload_repo
   git clone --depth 1 "$1" /tmp/payload_repo &>/dev/null
   if [ -d "/tmp/payload_repo/payload/.config" ]; then
@@ -73,4 +82,4 @@ gum spin --title "Initializing terminal interface..." -- bash -c "
   arch-chroot /mnt chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.zshrc
 "
 
-gum style --foreground 15 "[SYS] Operator ${USERNAME} successfully initialized in the matrix."
+gum style --foreground 15 "[SYS] User account $USERNAME successfully initialized."

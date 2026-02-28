@@ -6,25 +6,26 @@
 # ==============================================================================
 
 set -e
+source "modules/00_helpers.sh"
 
-# 1. TOPOLOGICAL OVERRIDE
-MODE=$(gum choose "Pre-partitioned (Mount existing topological map)" "Manual override (Launch cfdisk map editor)")
+# 1. PARTITIONING OVERRIDE (Optional)
+MODE=$(gum choose "Use existing partitions" "Manual partitioning (cfdisk)")
 
-if [ "$MODE" == "Manual Partitioning (Run cfdisk)" ]; then
+if [ "$MODE" == "Manual partitioning (cfdisk)" ]; then
   DISK_LIST=$(lsblk -dno NAME,SIZE,MODEL | grep -v "loop" | grep -v "sr")
-  SELECTED_DISK_LINE=$(echo "$DISK_LIST" | gum choose --header "Select target drive for re-formatting")
-  SELECTED_DISK=$(echo "$SELECTED_DISK_LINE" | awk '{print $1}' | sed 's|^[^/]*||')
+  SELECTED_DISK_LINE=$(echo "$DISK_LIST" | gum choose --header "Select target drive")
+  SELECTED_DISK=$(clean_path "$SELECTED_DISK_LINE")
 
   if [ -n "$SELECTED_DISK" ]; then
     cfdisk "$SELECTED_DISK"
   fi
 fi
 
-# 2. VECTOR ACQUISITION
+# 2. DEVICE DISCOVERY
 PART_LIST=$(lsblk -plno NAME,SIZE,TYPE,FSTYPE,LABEL | grep "part")
 
 if [ -z "$PART_LIST" ]; then
-  gum style --foreground 15 "[DISK] Blank slate detected. You must partition the drive first."
+  gum style --foreground 15 "[DISK] No partitions detected. Please partition the drive first."
   return 1
 fi
 
@@ -63,29 +64,22 @@ select_partition() {
   fi
 }
 
-# 3. FLASHING INSTRUCTIONS
-ISO=$(find out/ -maxdepth 1 -name "*.iso" -print -quit)
-if [ -z "$ISO" ]; then
-    echo "Error: No ISO found in out/"
-    exit 1
-fi
-
-# --- MANDATORY VECTORS ---
-PART_ROOT=$(select_partition "Designate ROOT (/) vector")
+# --- REQUIRED PARTITIONS ---
+PART_ROOT=$(select_partition "Select ROOT (/) partition")
 if [ -z "$PART_ROOT" ]; then return 1; fi
 MOUNTS["$PART_ROOT"]="/"
 
-PART_EFI=$(select_partition "Designate EFI payload sector (FAT32)")
+PART_EFI=$(select_partition "Select EFI partition (FAT32)")
 if [ -z "$PART_EFI" ]; then
-  gum style --foreground 15 "[DISK] FATAL: EFI vector missing. System will not boot state."
+  gum style --foreground 15 "[DISK] FATAL: EFI partition missing. System will not boot."
   return 1
 fi
 MOUNTS["$PART_EFI"]="/efi"
 
-# --- OPTIONAL VECTORS ---
+# --- OPTIONAL PARTITIONS ---
 HAS_MANUAL_HOME=false
-if gum confirm "Isolate /home data into a separate logical partition? (Optional)"; then
-  PART_HOME=$(select_partition "Designate /home storage vector")
+if gum confirm "Use a separate /home partition? (Optional)"; then
+  PART_HOME=$(select_partition "Select /home partition")
   if [ -n "$PART_HOME" ]; then
     MOUNTS["$PART_HOME"]="/home"
     HAS_MANUAL_HOME=true
@@ -101,36 +95,36 @@ if gum confirm "Use a separate /boot partition? (Not recommended for simple chai
   fi
 fi
 
-# --- MEMORY PAGING (SWAP) ---
+# --- SWAP SPACE ---
 SWAP_PART=$(lsblk -plno NAME,TYPE,FSTYPE | awk '$2=="part" && $3=="swap" {print $1}' | head -n1)
 ENABLE_SWAP=false
 if [ -n "$SWAP_PART" ]; then
-  if gum confirm "Dormant swap sector detected ($SWAP_PART). Activate memory paging?"; then
+  if gum confirm "Swap partition detected ($SWAP_PART). Enable it?"; then
     ENABLE_SWAP=true
   fi
 fi
 
-# 3. PURGE & INITIALIZATION SEQUENCE
+# 3. FORMATTING SEQUENCE
 for part in "${!MOUNTS[@]}"; do
   mnt="${MOUNTS[$part]}"
   if [ "$mnt" == "/efi" ]; then
-    if gum confirm "Compile $part as FAT32? (CAUTION: this obliterates existing boot records)"; then
-      gum spin --title "Injecting FAT32 grid on $part..." -- mkfs.fat -F32 "$part"
+    if gum confirm "Format $part as FAT32? (CAUTION: Erases boot records)"; then
+      gum spin --title "Formatting $part as FAT32..." -- mkfs.fat -F32 "$part"
     fi
   else
     # Opinionated: Always use Btrfs for everything else
-    gum style --foreground 15 "Enforcing Btrfs topology for $mnt to ensure a clean wipe..."
-    if gum confirm "Authorize Btrfs wipe for $mnt? (WARNING: Irreversible data annihilation)"; then
-      gum spin --title "Formatting $part with Btrfs geometric grid..." -- mkfs.btrfs -f "$part"
+    gum style --foreground 15 "Enforcing Btrfs for $mnt..."
+    if gum confirm "Format $part as Btrfs for $mnt? (WARNING: Irreversible data loss)"; then
+      gum spin --title "Formatting $part as Btrfs..." -- mkfs.btrfs -f "$part"
     fi
   fi
 done
 
 udevadm settle
 
-# 4. TOPOLOGICAL MOUNTING
-# Mount root first, then orchestrate Btrfs subvolumes.
-gum spin --title "Mounting base topographical structure..." -- bash -c '
+# 4. FILESYSTEM MOUNTING
+# Mount root first, then create and mount Btrfs subvolumes.
+gum spin --title "Mounting filesystem structure..." -- bash -c '
   set -e
   mount "$1" /mnt
 
@@ -167,7 +161,7 @@ done
 
 # Enable swap
 if [ "$ENABLE_SWAP" == "true" ]; then
-  gum spin --title "Activating dynamic memory paging on $SWAP_PART..." -- swapon "$SWAP_PART"
+  gum spin --title "Enabling swap on $SWAP_PART..." -- swapon "$SWAP_PART"
 fi
 
-gum style --foreground 15 "[DISK] Matrix topology established and mounted."
+gum style --foreground 15 "[DISK] Filesystem structure established and mounted."
