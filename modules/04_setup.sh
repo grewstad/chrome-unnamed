@@ -117,12 +117,11 @@ payload:
   base_apps: "$APPS"
 EOF
 
-# 2a. LAPTOP OPTIMIZATIONS
-if [ "$HAS_BATTERY" == "true" ]; then
-  gum spin --title "Optimizing for mobile hardware (TLP)..." -- \
-    arch-chroot /mnt systemctl enable tlp >> /mnt/root/chrome-unnamed/install.log 2>&1
-  gum style --foreground 10 " [OK] Laptop power management profile active."
-fi
+# 2b. SERVICE INITIALIZATION
+gum spin --title "Initializing background services..." -- bash -c "
+  arch-chroot /mnt systemctl enable systemd-timesyncd >> /mnt/root/chrome-unnamed/install.log 2>&1
+  arch-chroot /mnt systemctl enable reflector.timer >> /mnt/root/chrome-unnamed/install.log 2>&1
+"
 
 # 2b. SERVICE INITIALIZATION
 gum spin --title "Initializing background services..." -- bash -c "
@@ -181,6 +180,15 @@ gum spin --title "Initializing terminal interface..." -- bash -c "
     } >> /mnt/home/${USERNAME}/.zshrc
   fi
   
+  # Divergence: First-Flight Onboarding Trigger
+  cat <<EOF >> /mnt/home/${USERNAME}/.zshrc
+
+# Chrome-Unnamed First-Flight Trigger
+if [ ! -f ~/.chrome_unnamed_onboarded ]; then
+    /root/chrome-unnamed/modules/06_onboarding.sh
+fi
+EOF
+
   arch-chroot /mnt chown ${USERNAME}:${USERNAME} /home/${USERNAME}/.zshrc
 "
 
